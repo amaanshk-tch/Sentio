@@ -1,6 +1,6 @@
 # Sentio
 
-A Next.js project.
+A React.js project.
 
 ## Getting Started
 
