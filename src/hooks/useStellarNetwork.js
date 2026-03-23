@@ -23,10 +23,6 @@ async function safeFetch(url) {
   }
 }
 
-/**
- * Computes the average time between consecutive ledger closings (in seconds).
- * Uses absolute value in case records are not perfectly ordered.
- */
 function computeAvgClose(records) {
   if (!records || records.length < 2) return null;
   const diffs = [];
