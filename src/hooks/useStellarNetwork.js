@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 /* ─── Config ────────────────────────────────────────────────────────────── */
 const HORIZON            = "https://horizon.stellar.org";
-const REFRESH_MS         = 45_000;   // 45-second stable cadence
+const REFRESH_MS         = 30_000;   // 30-second stable cadence
 const REQUEST_TIMEOUT_MS = 8_000;
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
