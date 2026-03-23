@@ -1,14 +1,208 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+/* —— Sentio design system: tokens map to Tailwind utilities via @theme —— */
+@theme {
+  /* Surfaces & canvas */
+  --color-sentio-canvas: #07060b;
+  --color-sentio-elevated: #0e0c14;
+  --color-sentio-surface: #12101a;
+  --color-sentio-surface-hover: #181624;
+  --color-sentio-overlay: rgba(14, 12, 20, 0.72);
+
+  /* Brand */
+  --color-sentio-primary: #7c3aed;
+  --color-sentio-primary-hover: #6d28d9;
+  --color-sentio-accent: #22d3ee;
+  --color-sentio-accent-soft: rgba(34, 211, 238, 0.14);
+
+  /* Text */
+  --color-sentio-text: #f4f4f5;
+  --color-sentio-text-secondary: #a1a1aa;
+  --color-sentio-text-muted: #71717a;
+  --color-sentio-text-subtle: #52525b;
+
+  /* Borders */
+  --color-sentio-border: rgba(255, 255, 255, 0.08);
+  --color-sentio-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Semantic */
+  --color-sentio-success: #34d399;
+  --color-sentio-success-bg: rgba(52, 211, 153, 0.1);
+  --color-sentio-warning: #fbbf24;
+  --color-sentio-warning-bg: rgba(251, 191, 36, 0.1);
+  --color-sentio-danger: #fb7185;
+  --color-sentio-danger-bg: rgba(251, 113, 133, 0.1);
+
+  /* Radii */
+  --radius-sentio-sm: 0.5rem;
+  --radius-sentio-md: 0.75rem;
+  --radius-sentio-lg: 1rem;
+  --radius-sentio-xl: 1.25rem;
+  --radius-sentio-2xl: 1.5rem;
+
+  /* Shadows */
+  --shadow-sentio-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sentio-md: 0 4px 24px -4px rgba(0, 0, 0, 0.45);
+  --shadow-sentio-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.55);
+  --shadow-sentio-glow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 40px -8px rgba(124, 58, 237, 0.35);
+  --shadow-sentio-glow-accent: 0 0 60px -12px rgba(34, 211, 238, 0.2);
+
+  /* Typography scale (rem) */
+  --text-display: 3rem;
+  --text-h1: 2.25rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.125rem;
+  --text-body: 0.9375rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+
+  /* Spacing scale (used with arbitrary values or future utilities) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-section: clamp(3.5rem, 8vw, 6rem);
+
+  /* Layout */
+  --container-max: 72rem;
+  --container-padding: clamp(1rem, 4vw, 2rem);
+
+  /* Motion duration (ms) */
+  --duration-instant: 120ms;
+  --duration-fast: 200ms;
+  --duration-normal: 280ms;
+  --duration-slow: 400ms;
+
+  /* Surface tiers (explicit) */
+  --surface-base: rgba(18, 16, 26, 0.65);
+  --surface-elevated: rgba(14, 12, 20, 0.88);
+  --surface-highlight: rgba(18, 16, 26, 0.92);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: "Inter", system-ui, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-sentio-canvas);
+    color: var(--color-sentio-text);
+    font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+    font-size: var(--text-body);
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(124, 58, 237, 0.35);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(167, 139, 250, 0.85);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Ambient grid */
+@keyframes sentio-grid-shift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(48px, 48px, 0);
+  }
+}
+
+.sentio-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: sentio-grid-shift 28s linear infinite;
+}
+
+/* Skeleton shimmer */
+@keyframes sentio-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.sentio-shimmer {
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 40%,
+    rgba(255, 255, 255, 0.04) 80%
+  );
+  background-size: 200% 100%;
+  animation: sentio-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Typographic utilities */
+.text-display {
+  font-size: clamp(2.25rem, 4vw, var(--text-display));
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
+.text-h1 {
+  font-size: clamp(1.75rem, 3vw, var(--text-h1));
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+}
+
+.text-h2 {
+  font-size: var(--text-h2);
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+
+.text-h3 {
+  font-size: var(--text-h3);
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.text-body-lg {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--color-sentio-text-secondary);
+}
+
+.text-caption {
+  font-size: var(--text-caption);
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-sentio-text-muted);
 }
