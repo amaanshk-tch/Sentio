@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-/* ─── Config ────────────────────────────────────────────────────────────── */
 const HORIZON            = "https://horizon.stellar.org";
 const REFRESH_MS         = 30_000;
 const REQUEST_TIMEOUT_MS = 8_000;
