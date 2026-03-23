@@ -1,19 +1,3 @@
-/**
- * useStellarNetwork
- *
- * Fetches live Stellar ecosystem metrics exclusively from Horizon
- * (no third-party APIs — avoids browser CORS restrictions).
- *
- * Metrics derived:
- *   - ops24h          — extrapolated from recent 50 ledgers
- *   - avgLedgerClose  — median consecutive-ledger timestamp diff
- *   - networkHealth   — derived from close time + tx success rate
- *   - latestLedger    — sequence number from Horizon root
- *   - successRate     — % of successful txs in recent sample
- *
- * Refreshes every 45 seconds. Previous data stays visible during refresh.
- */
-
 import { useState, useEffect, useCallback, useRef } from "react";
 
 /* ─── Config ────────────────────────────────────────────────────────────── */

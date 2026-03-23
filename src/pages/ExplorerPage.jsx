@@ -80,7 +80,7 @@ export default function ExplorerPage() {
         <p className="mt-3 text-sentio-text-muted">Not financial or legal advice.</p>
       </Modal>
 
-      <main className="relative mx-auto w-full max-w-[var(--container-max)] px-[var(--container-padding)] pb-24 pt-[4.5rem]">
+      <main className="relative mx-auto w-full max-w-(--container-max) px-(--container-padding) pb-24 pt-18">
         <ExplorerHero query={query} setQuery={setQuery} onScan={onScan} loading={loading} />
 
         <section className="mt-8" aria-live="polite">
