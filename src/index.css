@@ -1,31 +1,24 @@
 @import "tailwindcss";
 
-/* —— Sentio design system: tokens map to Tailwind utilities via @theme —— */
 @theme {
-  /* Surfaces & canvas */
   --color-sentio-canvas: #07060b;
   --color-sentio-elevated: #0e0c14;
   --color-sentio-surface: #12101a;
   --color-sentio-surface-hover: #181624;
   --color-sentio-overlay: rgba(14, 12, 20, 0.72);
 
-  /* Brand */
   --color-sentio-primary: #7c3aed;
   --color-sentio-primary-hover: #6d28d9;
   --color-sentio-accent: #22d3ee;
   --color-sentio-accent-soft: rgba(34, 211, 238, 0.14);
-
-  /* Text */
   --color-sentio-text: #f4f4f5;
   --color-sentio-text-secondary: #a1a1aa;
   --color-sentio-text-muted: #71717a;
   --color-sentio-text-subtle: #52525b;
 
-  /* Borders */
   --color-sentio-border: rgba(255, 255, 255, 0.08);
   --color-sentio-border-strong: rgba(255, 255, 255, 0.14);
 
-  /* Semantic */
   --color-sentio-success: #34d399;
   --color-sentio-success-bg: rgba(52, 211, 153, 0.1);
   --color-sentio-warning: #fbbf24;
@@ -33,21 +26,18 @@
   --color-sentio-danger: #fb7185;
   --color-sentio-danger-bg: rgba(251, 113, 133, 0.1);
 
-  /* Radii */
   --radius-sentio-sm: 0.5rem;
   --radius-sentio-md: 0.75rem;
   --radius-sentio-lg: 1rem;
   --radius-sentio-xl: 1.25rem;
   --radius-sentio-2xl: 1.5rem;
 
-  /* Shadows */
   --shadow-sentio-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sentio-md: 0 4px 24px -4px rgba(0, 0, 0, 0.45);
   --shadow-sentio-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.55);
   --shadow-sentio-glow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 40px -8px rgba(124, 58, 237, 0.35);
   --shadow-sentio-glow-accent: 0 0 60px -12px rgba(34, 211, 238, 0.2);
 
-  /* Typography scale (rem) */
   --text-display: 3rem;
   --text-h1: 2.25rem;
   --text-h2: 1.5rem;
@@ -56,7 +46,6 @@
   --text-small: 0.8125rem;
   --text-caption: 0.75rem;
 
-  /* Spacing scale (used with arbitrary values or future utilities) */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -67,17 +56,14 @@
   --space-16: 4rem;
   --space-section: clamp(3.5rem, 8vw, 6rem);
 
-  /* Layout */
   --container-max: 72rem;
   --container-padding: clamp(1rem, 4vw, 2rem);
 
-  /* Motion duration (ms) */
   --duration-instant: 120ms;
   --duration-fast: 200ms;
   --duration-normal: 280ms;
   --duration-slow: 400ms;
 
-  /* Surface tiers (explicit) */
   --surface-base: rgba(18, 16, 26, 0.65);
   --surface-elevated: rgba(14, 12, 20, 0.88);
   --surface-highlight: rgba(18, 16, 26, 0.92);
@@ -124,7 +110,6 @@
   }
 }
 
-/* Ambient grid */
 @keyframes sentio-grid-shift {
   0% {
     transform: translate3d(0, 0, 0);
@@ -142,7 +127,6 @@
   animation: sentio-grid-shift 28s linear infinite;
 }
 
-/* Skeleton shimmer */
 @keyframes sentio-shimmer {
   0% {
     background-position: 200% 0;
@@ -163,7 +147,6 @@
   animation: sentio-shimmer 1.4s ease-in-out infinite;
 }
 
-/* Typographic utilities */
 .text-display {
   font-size: clamp(2.25rem, 4vw, var(--text-display));
   line-height: 1.1;

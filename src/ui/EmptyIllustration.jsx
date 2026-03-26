@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 
-/** Minimal abstract network — subtle line art */
 export function EmptyIllustration({ className }) {
   return (
     <svg

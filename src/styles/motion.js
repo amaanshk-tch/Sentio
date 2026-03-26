@@ -1,4 +1,3 @@
-/** Shared motion presets — fast, subtle, production-friendly */
 export const easeOut = [0.22, 1, 0.36, 1];
 
 export const fadeUp = {

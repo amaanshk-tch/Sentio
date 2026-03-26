@@ -15,7 +15,6 @@ export function TabList({ className, children }) {
   );
 }
 
-/** Animated sliding indicator via layoutId — use one TabList per screen or pass unique `groupId` */
 export function Tab({ selected, onSelect, children, className, groupId = "sentio-tabs" }) {
   return (
     <button
