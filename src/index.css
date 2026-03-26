@@ -9,8 +9,8 @@
 
   --color-sentio-primary: #7c3aed;
   --color-sentio-primary-hover: #6d28d9;
-  --color-sentio-accent: #22d3ee;
-  --color-sentio-accent-soft: rgba(34, 211, 238, 0.14);
+  --color-sentio-accent: #00f0ff;
+  --color-sentio-accent-soft: rgba(0, 240, 255, 0.14);
   --color-sentio-text: #f4f4f5;
   --color-sentio-text-secondary: #a1a1aa;
   --color-sentio-text-muted: #71717a;
@@ -19,12 +19,12 @@
   --color-sentio-border: rgba(255, 255, 255, 0.08);
   --color-sentio-border-strong: rgba(255, 255, 255, 0.14);
 
-  --color-sentio-success: #34d399;
-  --color-sentio-success-bg: rgba(52, 211, 153, 0.1);
+  --color-sentio-success: #00e676;
+  --color-sentio-success-bg: rgba(0, 230, 118, 0.1);
   --color-sentio-warning: #fbbf24;
   --color-sentio-warning-bg: rgba(251, 191, 36, 0.1);
-  --color-sentio-danger: #fb7185;
-  --color-sentio-danger-bg: rgba(251, 113, 133, 0.1);
+  --color-sentio-danger: #ff2a55;
+  --color-sentio-danger-bg: rgba(255, 42, 85, 0.1);
 
   --radius-sentio-sm: 0.5rem;
   --radius-sentio-md: 0.75rem;
@@ -148,10 +148,14 @@
 }
 
 .text-display {
-  font-size: clamp(2.25rem, 4vw, var(--text-display));
-  line-height: 1.1;
-  letter-spacing: -0.035em;
+  font-size: clamp(2.5rem, 5vw, var(--text-display));
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  font-weight: 300;
+}
+.text-display strong {
   font-weight: 600;
+  color: #fff;
 }
 
 .text-h1 {

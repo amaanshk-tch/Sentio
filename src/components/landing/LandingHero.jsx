@@ -30,7 +30,7 @@ export function LandingHero() {
         </ButtonLink>
       </motion.header>
 
-      <div className="grid flex-1 grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:gap-14 lg:pt-4">
+      <div className="grid flex-1 grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:gap-8 lg:pt-4">
         <div>
           <motion.div custom={0} variants={fade} initial="hidden" animate="show">
             <span className="inline-flex rounded-full border border-white/8 bg-sentio-surface/50 px-3 py-1.5 text-caption text-sentio-text-secondary">
@@ -45,15 +45,16 @@ export function LandingHero() {
             animate="show"
             className="text-display mt-6 max-w-[20ch] text-balance text-sentio-text"
           >
-            Risk clarity for{" "}
-            <span className="bg-linear-to-r from-violet-200 to-cyan-200/90 bg-clip-text text-transparent">
-              Stellar infrastructure
-            </span>
+            Know if it&apos;s <strong>safe</strong> before you{" "}
+            <span className="bg-linear-to-r from-cyan-400 to-violet-400 bg-clip-text font-semibold text-transparent">
+              click
+            </span>.
           </motion.h1>
 
           <motion.p custom={2} variants={fade} initial="hidden" animate="show" className="mt-5 max-w-lg text-body-lg">
-            Sentio aggregates on-chain signals into a single score and a calm readout—built for teams that need
-            confidence, not noise.
+            You receive a token. Looks legit. It isn&apos;t.
+            <br />
+            <span className="text-sentio-text-muted">Sentio intercepts and analyzes the risk before it&apos;s too late.</span>
           </motion.p>
 
           <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="mt-9 flex flex-wrap gap-3">

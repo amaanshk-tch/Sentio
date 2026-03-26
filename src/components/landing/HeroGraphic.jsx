@@ -22,6 +22,7 @@ import { motion, useReducedMotion, AnimatePresence } from "framer-motion";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { useStellarNetwork } from "../../hooks/useStellarNetwork";
+import { RiskScanSim } from "./RiskScanSim";
 
 /* ─── Motion presets ─────────────────────────────────────────────────────── */
 const ease = [0.22, 1, 0.36, 1];
@@ -249,7 +250,11 @@ function NetworkStatusBadge({ live, reduced }) {
               animate={reduced ? undefined : { scale: [1, 2.2, 1], opacity: [0.6, 0, 0.6] }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeOut" }}
             />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sentio-success" />
+            <motion.span 
+              className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sentio-success" 
+              animate={reduced ? undefined : { opacity: [1, 0.4, 1, 0.9, 0.3, 1, 1, 0.8, 1] }}
+              transition={{ duration: 4.2, repeat: Infinity, ease: "linear" }}
+            />
           </span>
           <span className="text-[0.58rem] font-medium text-sentio-success">LIVE</span>
         </div>
@@ -493,32 +498,42 @@ export function HeroGraphic() {
   const { status, data, updatedAt, refresh } = useStellarNetwork();
 
   return (
-    <div
-      className="relative mx-auto flex w-full max-w-[min(100%,400px)] items-center justify-center sm:max-w-md"
-    >
+    <div className="relative mx-auto flex w-full max-w-[min(100%,400px)] flex-col items-center sm:max-w-lg sm:items-end sm:justify-center">
       {/* Ambient background network */}
-      <div className="absolute inset-0 overflow-hidden rounded-3xl opacity-50">
+      <div className="absolute inset-0 overflow-hidden rounded-3xl opacity-50 sm:-inset-x-12">
         <BackgroundNetworkVisual reduced={reduced} />
       </div>
 
       {/* Ambient glow halo */}
       <motion.div
-        className="pointer-events-none absolute inset-[-2px] rounded-3xl"
+        className="pointer-events-none absolute inset-[-20px] rounded-3xl"
         style={{
           background:
-            "radial-gradient(ellipse 80% 55% at 50% 0%, rgba(124,58,237,0.16), transparent 65%)",
+            "radial-gradient(ellipse 80% 55% at 50% 0%, rgba(0,240,255,0.08), transparent 65%)",
         }}
         animate={reduced ? undefined : { opacity: [0.5, 0.9, 0.5] }}
         transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* The card */}
-      <NetworkSnapshotCard
-        status={status}
-        data={data}
-        updatedAt={updatedAt}
-        refresh={refresh}
-      />
+      {/* Main Card Container */}
+      <div className="relative z-10 w-full shrink-0 sm:w-[340px]">
+        <NetworkSnapshotCard
+          status={status}
+          data={data}
+          updatedAt={updatedAt}
+          refresh={refresh}
+        />
+        
+        {/* Floating Scanner Overlay (Desktop) */}
+        <div className="absolute -bottom-10 -left-20 z-20 hidden w-[280px] sm:block">
+          <RiskScanSim />
+        </div>
+      </div>
+      
+      {/* Floating Scanner (Mobile Fallback) */}
+      <div className="relative z-20 mt-6 flex w-full justify-center sm:hidden">
+        <RiskScanSim />
+      </div>
     </div>
   );
 }
