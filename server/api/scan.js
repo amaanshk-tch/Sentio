@@ -13,6 +13,7 @@ import {
   computeConfidence,
   computeRisk,
 } from "../riskEngine.js";
+import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
 
 /**
  * Executes a full scan for a Stellar account or asset.
@@ -44,6 +45,9 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     verifyHomeDomain(acc?.home_domain || null, accountId)
   ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
 
+  // Check Soroban RiskRegistry for existing on-chain reputation
+  const onchainRiskPromise = getOnchainRisk(address);
+
   // Recent transactions (last 200)
   const txRecentPromise = fetchJson(
     `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
@@ -69,14 +73,16 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     domainInfo,
     txRecent,
     txOldest,
-    opsPayload
+    opsPayload,
+    onchainData
   ] = await Promise.all([
     assetPromise,
     accountPromise,
     domainPromise,
     txRecentPromise,
     txOldestPromise,
-    opsPromise
+    opsPromise,
+    onchainRiskPromise
   ]);
 
   // ── Processing Phase ──────────────────────────────────────────────────────
@@ -125,6 +131,18 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
 
   const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
 
+  // ── Blockchain Trust Commit ───────────────────────────────────────────────
+  // If the score differs from what is registered on-chain, update it async
+  if (!isAsset && riskResult.score !== onchainData?.score) {
+    setOnchainRisk(address, {
+      score: riskResult.score,
+      confidence: confidence.score,
+      category: riskResult.risk
+    }).catch((e) => 
+      console.error("[Sentio] On-chain risk logging failed:", e?.message)
+    );
+  }
+
   // ── Counterparties ─────────────────────────────────────────────────────────
   let counterparties = null;
   if (opsPayload) {
@@ -166,6 +184,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     confidence,
     breakdown,
     counterparties,
+    onchainRiskData: onchainData,
     raw: { horizon: HORIZON_URL, accountId },
   };
 }

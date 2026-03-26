@@ -30,3 +30,10 @@ Thumbs.db
 
 # Vite cache
 .vite/
+
+# Rust
+target/
+contracts/**/target/
+test_snapshots/
+contracts/**/test_snapshots/
+*.wasm

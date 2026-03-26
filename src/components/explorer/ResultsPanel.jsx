@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, CircleDot, Radio } from "lucide-react";
+import { AlertTriangle, CircleDot, Radio, ShieldCheck } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { RiskGauge } from "./RiskGauge";
 import { FactorsBreakdown } from "./FactorsBreakdown";
@@ -41,6 +41,12 @@ export function ResultsPanel({ result, liveScore, trend, liveFactors, streaming 
             )}
           </AnimatePresence>
 
+          {result.onchainRiskData && (
+             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[0.6rem] font-semibold text-emerald-300 uppercase tracking-widest">
+               <ShieldCheck className="h-3 w-3" />
+               On-chain Verified
+             </span>
+          )}
           <span className={cn("inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold", classes.badge)}>
             {result.risk}
           </span>

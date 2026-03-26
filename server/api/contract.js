@@ -2,6 +2,7 @@ import { analyzeContract } from "../soroban/analyzer.js";
 import { computeContractRisk } from "../soroban/riskEngine.js";
 import { buildInsights, buildSummary, buildRecommendation } from "../soroban/insights.js";
 import { cacheGet, cacheSet } from "../utils/cache.js";
+import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
 
 /**
  * Express handler for POST /api/scan/contract (Soroban smart contracts)
@@ -21,8 +22,20 @@ export async function contractScanHandler(req, res) {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000); // 14s timeout
     try {
+      const onchainRiskPromise = getOnchainRisk(query);
       const data     = await analyzeContract(query, { signal: controller.signal });
       const risk     = computeContractRisk(data);
+      const onchainData = await onchainRiskPromise;
+
+      if (risk.score !== onchainData?.score) {
+        setOnchainRisk(query, {
+          score: risk.score,
+          confidence: risk.confidence,
+          category: risk.risk
+        }).catch((e) => 
+          console.error("[Sentio] On-chain risk logging failed:", e?.message)
+        );
+      }
       const insights = buildInsights(risk.flags);
       const summary  = buildSummary(data, risk);
       const rec      = buildRecommendation(risk.score);
@@ -58,6 +71,7 @@ export async function contractScanHandler(req, res) {
           history: risk.history,
         },
         confidence: risk.confidence,
+        onchainRiskData: onchainData,
       };
 
       cacheSet(cacheKey, result);
