@@ -78,13 +78,9 @@ export function withIcons(items) {
 export function toneCardShell(tone) {
   switch (tone) {
     case "emerald":
-      return "border-emerald-500/20 bg-emerald-500/[0.05] ring-emerald-500/10";
-    case "amber":
-      return "border-amber-500/20 bg-amber-500/[0.06] ring-amber-500/10";
-    case "rose":
-      return "border-rose-500/20 bg-rose-500/[0.06] ring-rose-500/10";
+      return "border-rose-500/20 bg-rose-500/6 ring-rose-500/10";
     default:
-      return "border-white/[0.08] bg-white/[0.03] ring-white/[0.04]";
+      return "border-white/8 bg-white/3 ring-white/4";
   }
 }
 
@@ -97,6 +93,6 @@ export function toneIconWrap(tone) {
     case "rose":
       return "bg-rose-500/15 text-rose-100 ring-rose-400/25";
     default:
-      return "bg-white/[0.08] text-sentio-text ring-white/[0.1]";
+      return "bg-white/8 text-sentio-text ring-white/10";
   }
 }

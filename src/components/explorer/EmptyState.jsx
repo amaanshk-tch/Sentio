@@ -9,7 +9,7 @@ import { EXAMPLES } from "./constants";
 
 export function EmptyState({ onFillExample }) {
   return (
-    <Card interactive className="border-dashed border-white/[0.12] bg-sentio-surface/35">
+    <Card interactive className="border-dashed border-white/12 bg-sentio-surface/35">
       <div className="flex flex-col items-center text-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
@@ -32,9 +32,9 @@ export function EmptyState({ onFillExample }) {
               type="button"
               onClick={() => onFillExample(EXAMPLES.account)}
               className={cn(
-                "rounded-xl border border-white/[0.1] bg-sentio-elevated/80 px-4 py-3 text-left text-sm transition",
+                "rounded-xl border border-white/10 bg-sentio-elevated/80 px-4 py-3 text-left text-sm transition",
                 "hover:border-violet-400/30 hover:bg-sentio-surface/80",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
               )}
             >
               <span className="text-xs font-medium text-sentio-text-muted">Account</span>
@@ -46,9 +46,9 @@ export function EmptyState({ onFillExample }) {
               type="button"
               onClick={() => onFillExample(EXAMPLES.asset)}
               className={cn(
-                "rounded-xl border border-white/[0.1] bg-sentio-elevated/80 px-4 py-3 text-left text-sm transition",
+                "rounded-xl border border-white/10 bg-sentio-elevated/80 px-4 py-3 text-left text-sm transition",
                 "hover:border-violet-400/30 hover:bg-sentio-surface/80",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
               )}
             >
               <span className="text-xs font-medium text-sentio-text-muted">Asset</span>

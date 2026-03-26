@@ -31,7 +31,7 @@ function InfoCard({ icon: Icon, title, value, status, tone }) {
         ? "border-amber-400/25 bg-amber-500/12 text-amber-100"
         : tone === "rose"
           ? "border-rose-400/25 bg-rose-500/12 text-rose-100"
-          : "border-white/[0.08] bg-white/[0.04] text-sentio-text-secondary";
+          : "border-white/8 bg-white/4 text-sentio-text-secondary";
 
   return (
     <motion.div
@@ -39,7 +39,7 @@ function InfoCard({ icon: Icon, title, value, status, tone }) {
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className={cn(
         "rounded-sentio-xl border p-5 shadow-sentio-sm backdrop-blur-md",
-        "ring-1 ring-inset ring-white/[0.03]",
+        "ring-1 ring-inset ring-white/3",
         shell
       )}
     >

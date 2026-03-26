@@ -30,18 +30,12 @@ function computeAvgClose(records) {
     const ms = Math.abs(
       new Date(records[i].closed_at) - new Date(records[i + 1].closed_at)
     );
-    if (ms > 0 && ms < 60_000) diffs.push(ms / 1000); // discard outliers > 60s
+    if (ms > 0 && ms < 60_000) diffs.push(ms / 1000);
   }
   if (!diffs.length) return null;
   return diffs.reduce((a, b) => a + b, 0) / diffs.length;
 }
 
-/**
- * Derives a human-readable network health status from observable metrics.
- *   healthy  — avg close ≤ 8s AND success rate ≥ 90 %
- *   stable   — avg close ≤ 20s
- *   degraded — anything worse
- */
 function deriveHealth(avgClose, successRate) {
   if (avgClose === null) return { label: "Unknown", level: "unknown" };
   const healthyClose    = avgClose <= 7;
@@ -51,21 +45,7 @@ function deriveHealth(avgClose, successRate) {
   return                                     { label: "Degraded", level: "degraded" };
 }
 
-/* ─── Hook ───────────────────────────────────────────────────────────────── */
-/**
- * @returns {{
- *   status: "loading" | "refreshing" | "success" | "error",
- *   data: {
- *     latestLedger: number | null,
- *     successRate: number | null,
- *     ops24h: number | null,
- *     avgLedgerClose: number | null,
- *     networkHealth: { label: string, level: string },
- *   } | null,
- *   updatedAt: number | null,
- *   refresh: () => void,
- * }}
- */
+/* ─── Hook ─── */
 export function useStellarNetwork() {
   const [state, setState] = useState({
     status: "loading",
@@ -85,7 +65,7 @@ export function useStellarNetwork() {
       status: prev.data ? "refreshing" : "loading",
     }));
 
-    /* ── Step 1: Horizon (core metrics — required) ── */
+    /* ── Horizon ── */
     const [root, ledgersPayload] = await Promise.all([
       safeFetch(`${HORIZON}/`),
       safeFetch(`${HORIZON}/ledgers?order=desc&limit=50`),
@@ -106,12 +86,11 @@ export function useStellarNetwork() {
 
     const avgClose = computeAvgClose(records);
 
-    // Tx success rate
+
     const totalTx   = records.reduce((s, l) => s + (l.successful_transaction_count ?? 0) + (l.failed_transaction_count ?? 0), 0);
     const successTx = records.reduce((s, l) => s + (l.successful_transaction_count ?? 0), 0);
     const successRate = totalTx > 0 ? successTx / totalTx : null;
 
-    // 24h operation extrapolation from recent sample
     let ops24h = null;
     if (records.length >= 2) {
       const totalOps = records.reduce((s, l) => s + (l.operation_count ?? 0), 0);
