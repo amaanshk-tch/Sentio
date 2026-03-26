@@ -10,6 +10,7 @@ import { InsightPanel } from "../components/explorer/InsightPanel";
 import { LoadingPanel } from "../components/explorer/LoadingPanel";
 import { ResultsPanel } from "../components/explorer/ResultsPanel";
 import { withIcons } from "../components/explorer/utils";
+import { useRiskStream } from "../hooks/useRiskStream";
 import { Modal } from "../ui/Modal";
 import { SignalChart } from "../ui/SignalChart";
 import { Card } from "../ui/Card";
@@ -21,6 +22,9 @@ export default function ExplorerPage() {
   const [error, setError] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const reducedMotion = useReducedMotion();
+
+  const accountId = result?.raw?.accountId ?? null;
+  const { liveScore, trend, liveFactors, streaming } = useRiskStream(accountId);
 
   const onScan = async () => {
     const input = query.trim();
@@ -114,7 +118,7 @@ export default function ExplorerPage() {
                 transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
                 className="space-y-6"
               >
-                <ResultsPanel result={result} />
+                <ResultsPanel result={result} liveScore={liveScore} trend={trend} liveFactors={liveFactors} streaming={streaming} />
                 <InsightPanel text={result.insight} score={result.score} action={result.action} confidence={result.confidence} />
 
                 <div>

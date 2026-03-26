@@ -1,5 +1,7 @@
+import http from "http";
 import express from "express";
 import cors from "cors";
+import { WebSocketServer } from "ws";
 import {
   verifyHomeDomain,
   analyzeTransactionPatterns,
@@ -8,287 +10,267 @@ import {
   computeRisk,
 } from "./riskEngine.js";
 
-const app = express();
+const app    = express();
+const server = http.createServer(app);
+const wss    = new WebSocketServer({ server, path: "/ws" });
+
 app.use(cors());
 app.use(express.json());
 
 const HORIZON_URL = process.env.STELLAR_HORIZON_URL || "https://horizon.stellar.org";
+const STREAM_TTL_MS = 5 * 60 * 1000;
 
 /* ─── Rate Limiting ──────────────────────────────────────────────────────── */
 const rateWindows = new Map();
-
 function rateLimitMiddleware(maxPerMinute = 30) {
   return (req, res, next) => {
-    const ip = req.ip || req.connection?.remoteAddress || "unknown";
+    const ip  = req.ip || req.connection?.remoteAddress || "unknown";
     const now = Date.now();
-    const window = rateWindows.get(ip);
-    if (!window || now > window.resetAt) {
-      rateWindows.set(ip, { count: 1, resetAt: now + 60_000 });
-      return next();
-    }
-    if (window.count >= maxPerMinute) {
-      return res.status(429).json({ error: "Too many requests. Please wait a moment before scanning again." });
-    }
-    window.count++;
+    const win = rateWindows.get(ip);
+    if (!win || now > win.resetAt) { rateWindows.set(ip, { count: 1, resetAt: now + 60_000 }); return next(); }
+    if (win.count >= maxPerMinute) return res.status(429).json({ error: "Too many requests. Please wait." });
+    win.count++;
     next();
   };
 }
 
 /* ─── In-Memory Cache ────────────────────────────────────────────────────── */
-const cache = new Map(); // key -> { data, expiry }
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const cache = new Map();
+const CACHE_TTL_MS = 3 * 60 * 1000;
+function cacheGet(k) { const e = cache.get(k); if (!e || Date.now() > e.expiry) { cache.delete(k); return null; } return e.data; }
+function cacheSet(k, d) { cache.set(k, { data: d, expiry: Date.now() + CACHE_TTL_MS }); }
 
-function cacheGet(key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiry) { cache.delete(key); return null; }
-  return entry.data;
-}
-function cacheSet(key, data) {
-  cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
-}
-
-/* ─── Input Parsing & Normalization ──────────────────────────────────────── */
-function isLikelyStellarAccount(s) {
-  return typeof s === "string" && /^G[A-Z2-7]{55}$/.test(s.trim());
-}
-
+/* ─── Input Helpers ──────────────────────────────────────────────────────── */
+function isAccount(s) { return typeof s === "string" && /^G[A-Z2-7]{55}$/.test(s.trim()); }
 function parseAsset(s) {
   if (typeof s !== "string") return null;
-  const trimmed = s.trim();
-  const idx = trimmed.indexOf(":");
+  const t = s.trim(), idx = t.indexOf(":");
   if (idx === -1) return null;
-  const code = trimmed.slice(0, idx).trim().toUpperCase();
-  const issuer = trimmed.slice(idx + 1).trim().toUpperCase();
-  if (!code || !issuer) return null;
-  if (!/^[A-Za-z0-9]{1,12}$/.test(code)) return null;
-  if (!isLikelyStellarAccount(issuer)) return null;
+  const code = t.slice(0, idx).trim().toUpperCase(), issuer = t.slice(idx + 1).trim().toUpperCase();
+  if (!code || !issuer || !/^[A-Za-z0-9]{1,12}$/.test(code) || !isAccount(issuer)) return null;
   return { code, issuer, raw: `${code}:${issuer}` };
 }
-
 function normalizeQuery(raw) {
   if (typeof raw !== "string") return "";
-  // Collapse whitespace, strip invisible chars
   let q = raw.trim().replace(/[\s\u200B-\u200D\uFEFF]/g, "");
-  // If it looks like an asset (contains :) uppercase the code part
-  if (q.includes(":")) {
-    const [code, ...rest] = q.split(":");
-    q = `${code.toUpperCase()}:${rest.join(":")}`;
-  }
+  if (q.includes(":")) { const [c, ...r] = q.split(":"); q = `${c.toUpperCase()}:${r.join(":")}`; }
   return q;
 }
 
 /* ─── Fetch Helpers ──────────────────────────────────────────────────────── */
 async function fetchJson(url, { signal } = {}) {
-  const res = await fetch(url, {
-    signal,
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(`Request failed (${res.status})`);
-    err.status = res.status;
-    err.body = text;
-    throw err;
-  }
+  const res = await fetch(url, { signal, headers: { accept: "application/json" } });
+  if (!res.ok) { const err = new Error(`HTTP ${res.status}`); err.status = res.status; throw err; }
   return res.json();
 }
 
-/* ─── /api/scan ──────────────────────────────────────────────────────────── */
-app.post("/api/scan", rateLimitMiddleware(30), async (req, res) => {
-  try {
-    const body = req.body || {};
-    const raw = typeof body?.query === "string" ? body.query : "";
-    const query = normalizeQuery(raw);
-    if (!query) return res.status(400).json({ error: "Missing query" });
+/* ─── Full Scan (shared logic) ───────────────────────────────────────────── */
+async function runScan(query, { signal, prevScore = null } = {}) {
+  const asset   = parseAsset(query);
+  const isAsset = Boolean(asset);
+  const accountId = isAsset ? asset.issuer : query;
+  let address   = query;
+  let assetSupply = null;
 
-    const asset = parseAsset(query);
-    const isAsset = Boolean(asset);
+  if (isAsset) {
+    address = asset.raw;
+    const assets = await fetchJson(
+      `${HORIZON_URL}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
+      { signal }
+    );
+    const record = assets?._embedded?.records?.[0];
+    if (record?.amount != null) { const p = Number(record.amount); assetSupply = Number.isFinite(p) ? p : null; }
+  }
 
-    if (!isAsset && !isLikelyStellarAccount(query)) {
-      return res.status(400).json({
-        error: "Invalid input. Accepted formats: Stellar account (G...) or asset (CODE:ISSUER).",
-      });
-    }
+  const account = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}`, { signal });
+  const { verified: domainVerified, homeDomain: normalizedDomain, accountListed } =
+    await verifyHomeDomain(account?.home_domain || null, accountId);
 
-    // ── Cache check ──────────────────────────────────────────────────────────
-    const cacheKey = isAsset ? `asset:${asset.code}:${asset.issuer}` : `account:${query}`;
-    const cached = cacheGet(cacheKey);
-    if (cached) return res.json({ ...cached, cached: true });
+  const balances       = Array.isArray(account?.balances) ? account.balances : [];
+  const trustlinesCount = balances.filter((b) => b?.asset_type && b.asset_type !== "native").length;
+  const { qualityScore: trustlineQuality, flags: trustlineFlags } = analyzeTrustlines(balances);
 
-    // ── Fetch ────────────────────────────────────────────────────────────────
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 14_000);
-    const signal = controller.signal;
+  const accFlags = account?.flags || {};
+  const flags = [];
+  if (accFlags?.auth_required)  flags.push("auth_required");
+  if (accFlags?.auth_revocable) flags.push("auth_revocable");
+  if (accFlags?.auth_immutable) flags.push("auth_immutable");
+  if (isAsset && account?.clawback_enabled) flags.push("clawback_enabled");
 
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const txRecent = await fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
+    { signal }
+  );
+  const recentRecords = Array.isArray(txRecent?._embedded?.records) ? txRecent._embedded.records : [];
+  const txRecentCount = recentRecords.filter((t) => {
+    const c = Date.parse(t?.created_at || "");
+    return Number.isFinite(c) && c >= thirtyDaysAgo;
+  }).length;
+
+  const { pattern: txPattern, flags: txFlags, velocity } = analyzeTransactionPatterns(recentRecords);
+
+  const txOldest = await fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
+    { signal }
+  );
+  const oldest   = txOldest?._embedded?.records?.[0];
+  const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
+  const ageDays  = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((now - oldestAt) / 86_400_000)) : null;
+
+  const riskResult = computeRisk({
+    ageDays, txRecentCount, trustlinesCount, domainVerified,
+    accountListed: accountListed ?? false, flags, isAsset, assetSupply,
+    txPattern, trustlineFlags, trustlineQuality, velocity, prevScore,
+  });
+
+  const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
+
+  const breakdown = [
+    { key: "age",        title: "Account Age",          value: ageDays == null ? "Unknown" : `${ageDays} days`,                              status: ageDays == null ? "Unknown" : ageDays < 14 ? "New" : ageDays < 90 ? "Growing" : "Established", tone: ageDays == null ? "slate" : ageDays < 14 ? "rose" : ageDays < 90 ? "amber" : "emerald", flag: ageDays != null && ageDays < 14 ? "new_account" : null },
+    { key: "tx",         title: "Transactions (30d)",   value: txRecentCount?.toLocaleString() ?? "Unknown",                                  status: txRecentCount == null ? "Unknown" : txRecentCount < 5 ? "Very low" : txRecentCount < 25 ? "Low" : "Normal", tone: txRecentCount == null ? "slate" : txRecentCount < 5 ? "rose" : txRecentCount < 25 ? "amber" : "emerald", flag: txPattern !== "normal" ? txPattern : null },
+    { key: "trustlines", title: "Trustlines",            value: trustlinesCount == null ? "Unknown" : String(trustlinesCount),                status: trustlinesCount == null ? "Unknown" : trustlinesCount === 0 ? "None" : trustlinesCount < 10 ? "Typical" : "Broad", tone: trustlinesCount == null ? "slate" : trustlinesCount === 0 ? "amber" : trustlineQuality < 70 ? "amber" : "emerald", flag: trustlineFlags.length > 0 ? "lookalike" : null },
+    { key: "domain",     title: "Domain Status",         value: normalizedDomain || "—",                                                       status: domainVerified ? (accountListed ? "Verified + Listed" : "Verified") : "Unverified", tone: domainVerified ? "emerald" : "rose", flag: !domainVerified ? "no_domain" : null },
+    { key: "supply",     title: "Asset Supply",          value: isAsset ? (assetSupply?.toLocaleString() ?? "Unknown") : "—",                 status: !isAsset ? "N/A" : assetSupply == null ? "Unknown" : assetSupply > 600_000_000 ? "Elevated" : "Normal", tone: !isAsset ? "slate" : assetSupply == null ? "slate" : assetSupply > 600_000_000 ? "amber" : "emerald", flag: isAsset && assetSupply > 600_000_000 ? "high_supply" : null },
+    { key: "flags",      title: "Flags",                 value: String(flags.length),                                                          status: flags.length ? "Present" : "None", tone: flags.length ? "amber" : "emerald", flag: flags.includes("clawback_enabled") ? "clawback" : flags.length > 0 ? "flagged" : null },
+  ];
+
+  return {
+    input: query, isAsset, address,
+    ...riskResult,
+    confidence,
+    breakdown,
+    raw: { horizon: HORIZON_URL, accountId },
+  };
+}
+
+/* ─── WebSocket: Live Stream ─────────────────────────────────────────────── */
+wss.on("connection", (ws) => {
+  let horizonReader    = null;
+  let streamController = null;
+  let killTimer        = null;
+  let lastScore        = null;
+
+  function cleanup() {
+    if (killTimer)        { clearTimeout(killTimer); killTimer = null; }
+    if (streamController) { streamController.abort(); streamController = null; }
+    horizonReader = null;
+  }
+
+  function resetKillTimer() {
+    if (killTimer) clearTimeout(killTimer);
+    killTimer = setTimeout(() => {
+      try { ws.send(JSON.stringify({ type: "stream_stopped", reason: "timeout" })); } catch {}
+      cleanup();
+    }, STREAM_TTL_MS);
+  }
+
+  async function startStream(accountId) {
+    cleanup();
+    streamController = new AbortController();
+    resetKillTimer();
+
+    const url = `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&cursor=now`;
     try {
-      let address = query;
-      let accountId = query;
-      let assetSupply = null;
+      const res = await fetch(url, {
+        signal: streamController.signal,
+        headers: { accept: "text/event-stream" },
+      });
+      if (!res.ok || !res.body) return;
 
-      if (isAsset) {
-        address = asset.raw;
-        accountId = asset.issuer;
+      const reader = res.body.getReader();
+      horizonReader = reader;
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-        const assetsUrl = `${HORIZON_URL}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`;
-        const assets = await fetchJson(assetsUrl, { signal });
-        const record = assets?._embedded?.records?.[0];
-        if (record?.amount != null) {
-          const parsed = Number(record.amount);
-          assetSupply = Number.isFinite(parsed) ? parsed : null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (!payload || payload === "\"hello\"" || payload === "bye") continue;
+          let tx;
+          try { tx = JSON.parse(payload); } catch { continue; }
+          if (!tx?.id) continue;
+
+          resetKillTimer();
+          try {
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 12_000);
+            const updated = await runScan(accountId, { signal: controller.signal, prevScore: lastScore });
+            clearTimeout(t);
+            lastScore = updated.score;
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: "update", newTx: tx, ...updated }));
+            }
+          } catch (e) { console.error("[ws rescan]", e?.message); }
         }
       }
+    } catch (e) {
+      if (e?.name !== "AbortError") console.error("[horizon stream]", e?.message);
+    }
+  }
 
-      const accountUrl = `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}`;
-      const account = await fetchJson(accountUrl, { signal });
+  ws.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(String(raw));
+      if (msg.type === "subscribe" && msg.accountId) {
+        const id = String(msg.accountId).trim().toUpperCase();
+        if (isAccount(id)) startStream(id);
+      } else if (msg.type === "unsubscribe") {
+        cleanup();
+      }
+    } catch {}
+  });
 
-      // ── Domain + TOML ──────────────────────────────────────────────────────
-      const homeDomain = account?.home_domain || null;
-      const { verified: domainVerified, homeDomain: normalizedDomain, accountListed } =
-        await verifyHomeDomain(homeDomain, accountId);
+  ws.on("close", cleanup);
+  ws.on("error", cleanup);
+});
 
-      // ── Balances / trustlines ──────────────────────────────────────────────
-      const balances = Array.isArray(account?.balances) ? account.balances : [];
-      const trustlinesCount = balances.filter((b) => b?.asset_type && b.asset_type !== "native").length;
-      const { qualityScore: trustlineQuality, flags: trustlineFlags } = analyzeTrustlines(balances);
+/* ─── POST /api/scan ─────────────────────────────────────────────────────── */
+app.post("/api/scan", rateLimitMiddleware(30), async (req, res) => {
+  try {
+    const query = normalizeQuery(req.body?.query ?? "");
+    if (!query) return res.status(400).json({ error: "Missing query" });
 
-      // ── Flags ──────────────────────────────────────────────────────────────
-      const flags = [];
-      const accFlags = account?.flags || {};
-      if (accFlags?.auth_required)  flags.push("auth_required");
-      if (accFlags?.auth_revocable) flags.push("auth_revocable");
-      if (accFlags?.auth_immutable) flags.push("auth_immutable");
-      if (isAsset && account?.clawback_enabled) flags.push("clawback_enabled");
+    const asset   = parseAsset(query);
+    const isAsset = Boolean(asset);
+    if (!isAsset && !isAccount(query))
+      return res.status(400).json({ error: "Invalid input. Use a Stellar account (G...) or CODE:ISSUER." });
 
-      // ── Transactions ───────────────────────────────────────────────────────
-      const now = Date.now();
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const cacheKey = isAsset ? `asset:${asset.code}:${asset.issuer}` : `account:${query}`;
+    const cached   = cacheGet(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
 
-      const txRecentUrl = `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`;
-      const txRecent = await fetchJson(txRecentUrl, { signal });
-      const recentRecords = Array.isArray(txRecent?._embedded?.records) ? txRecent._embedded.records : [];
-      const txRecentCount = recentRecords.filter((t) => {
-        const created = Date.parse(t?.created_at || "");
-        return Number.isFinite(created) && created >= thirtyDaysAgo;
-      }).length;
-
-      const { pattern: txPattern, flags: txFlags } = analyzeTransactionPatterns(recentRecords);
-
-      const txOldestUrl = `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`;
-      const txOldest = await fetchJson(txOldestUrl, { signal });
-      const oldest = txOldest?._embedded?.records?.[0];
-      const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
-      const ageDays = Number.isFinite(oldestAt)
-        ? Math.max(0, Math.floor((now - oldestAt) / (24 * 60 * 60 * 1000)))
-        : null;
-
-      // ── Risk computation ───────────────────────────────────────────────────
-      const { score, risk, color, reasons, riskFactors, insight, action } = computeRisk({
-        ageDays,
-        txRecentCount,
-        trustlinesCount,
-        domainVerified,
-        accountListed: accountListed ?? false,
-        flags,
-        isAsset,
-        assetSupply,
-        txPattern,
-        trustlineFlags,
-        trustlineQuality,
-      });
-
-      const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
-
-      // ── Breakdown grid ─────────────────────────────────────────────────────
-      const breakdown = [
-        {
-          key: "age",
-          title: "Account Age",
-          value: ageDays == null ? "Unknown" : `${ageDays} days`,
-          status: ageDays == null ? "Unknown" : ageDays < 14 ? "New" : ageDays < 90 ? "Growing" : "Established",
-          tone: ageDays == null ? "slate" : ageDays < 14 ? "rose" : ageDays < 90 ? "amber" : "emerald",
-        },
-        {
-          key: "tx",
-          title: "Transactions (30d)",
-          value: txRecentCount == null ? "Unknown" : txRecentCount.toLocaleString(),
-          status: txRecentCount == null ? "Unknown" : txRecentCount < 5 ? "Very low" : txRecentCount < 25 ? "Low" : "Normal",
-          tone: txRecentCount == null ? "slate" : txRecentCount < 5 ? "rose" : txRecentCount < 25 ? "amber" : "emerald",
-          flag: txPattern !== "normal" ? txPattern : null,
-        },
-        {
-          key: "trustlines",
-          title: "Trustlines",
-          value: trustlinesCount == null ? "Unknown" : String(trustlinesCount),
-          status: trustlinesCount == null ? "Unknown" : trustlinesCount === 0 ? "None" : trustlinesCount < 10 ? "Typical" : "Broad",
-          tone: trustlinesCount == null ? "slate" : trustlinesCount === 0 ? "amber" :
-            (trustlineQuality < 70 ? "amber" : "emerald"),
-          flag: trustlineFlags.length > 0 ? "lookalike" : null,
-        },
-        {
-          key: "domain",
-          title: "Domain Status",
-          value: normalizedDomain ? normalizedDomain : "—",
-          status: domainVerified ? (accountListed ? "Verified + Listed" : "Verified") : "Unverified",
-          tone: domainVerified ? "emerald" : "rose",
-          flag: !domainVerified ? "no_domain" : null,
-        },
-        {
-          key: "supply",
-          title: "Asset Supply",
-          value: isAsset ? (assetSupply == null ? "Unknown" : assetSupply.toLocaleString()) : "—",
-          status: !isAsset ? "N/A" : assetSupply == null ? "Unknown" : assetSupply > 600_000_000 ? "Elevated" : "Normal",
-          tone: !isAsset ? "slate" : assetSupply == null ? "slate" : assetSupply > 600_000_000 ? "amber" : "emerald",
-          flag: isAsset && assetSupply > 600_000_000 ? "high_supply" : null,
-        },
-        {
-          key: "flags",
-          title: "Flags",
-          value: String(flags.length),
-          status: flags.length ? "Present" : "None",
-          tone: flags.length ? "amber" : "emerald",
-          flag: flags.includes("clawback_enabled") ? "clawback" : flags.length > 0 ? "flagged" : null,
-        },
-      ];
-
-      const result = {
-        input: query,
-        isAsset,
-        address,
-        score,
-        risk,
-        color,
-        reasons,
-        riskFactors,
-        breakdown,
-        insight,
-        action,
-        confidence,
-        raw: { horizon: HORIZON_URL, accountId },
-      };
-
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 14_000);
+    try {
+      const result = await runScan(query, { signal: controller.signal });
       cacheSet(cacheKey, result);
       return res.json(result);
     } finally {
       clearTimeout(timeout);
     }
   } catch (err) {
-    console.error("[scan error]", err?.message || err);
-    const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
-    const message =
-      status === 404
-        ? "Not found on the Stellar network. Check the address or issuer."
-        : err?.name === "AbortError"
-          ? "Request timed out. Please try again."
-          : "Scan failed. Please try again.";
-    return res.status(status === 404 ? 404 : 500).json({ error: message });
+    console.error("[scan error]", err?.message);
+    const status = err?.status === 404 ? 404 : 500;
+    const message = err?.status === 404
+      ? "Not found on Stellar network."
+      : err?.name === "AbortError"
+        ? "Request timed out. Please try again."
+        : "Scan failed. Please try again.";
+    return res.status(status).json({ error: message });
   }
 });
 
-/* ─── Health endpoint ────────────────────────────────────────────────────── */
+/* ─── GET /api/health ────────────────────────────────────────────────────── */
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Sentio API server running on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`Sentio server running on http://localhost:${PORT}`));
