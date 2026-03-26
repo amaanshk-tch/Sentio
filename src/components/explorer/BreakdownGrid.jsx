@@ -1,7 +1,19 @@
 import { motion } from "framer-motion";
+import { Flag } from "lucide-react";
 import { staggerContainer, staggerItem } from "../../styles/motion";
 import { cn } from "../../lib/cn";
 import { toneCardShell, toneIconWrap } from "./utils";
+
+const FLAG_LABELS = {
+  bot_spam: "Bot / Spam",
+  burst: "Burst Activity",
+  dusting: "Dusting",
+  lookalike: "Lookalike Asset",
+  no_domain: "No Domain",
+  high_supply: "High Supply",
+  clawback: "Clawback",
+  flagged: "Flagged",
+};
 
 export function BreakdownGrid({ items }) {
   return (
@@ -20,9 +32,10 @@ export function BreakdownGrid({ items }) {
   );
 }
 
-function InfoCard({ icon: Icon, title, value, status, tone }) {
+function InfoCard({ icon: Icon, title, value, status, tone, flag }) {
   const shell = toneCardShell(tone);
   const iconWrap = toneIconWrap(tone);
+  const hasFlag = Boolean(flag);
 
   const badge =
     tone === "emerald"
@@ -38,11 +51,18 @@ function InfoCard({ icon: Icon, title, value, status, tone }) {
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className={cn(
-        "rounded-sentio-xl border p-5 shadow-sentio-sm backdrop-blur-md",
+        "relative rounded-sentio-xl border p-5 shadow-sentio-sm backdrop-blur-md",
         "ring-1 ring-inset ring-white/3",
         shell
       )}
     >
+      {hasFlag && (
+        <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full border border-rose-400/30 bg-rose-500/12 px-2 py-0.5 text-[0.6rem] font-semibold text-rose-300">
+          <Flag className="h-2.5 w-2.5" aria-hidden />
+          {FLAG_LABELS[flag] ?? flag}
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-4">
           <div className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-xl ring-1", iconWrap)}>

@@ -115,7 +115,7 @@ export default function ExplorerPage() {
                 className="space-y-6"
               >
                 <ResultsPanel result={result} />
-                <InsightPanel text={result.insight} score={result.score} />
+                <InsightPanel text={result.insight} score={result.score} action={result.action} confidence={result.confidence} />
 
                 <div>
                   <p className="text-caption text-sentio-text-muted">Supporting detail</p>

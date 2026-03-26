@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const HORIZON            = "https://horizon.stellar.org";
-const REFRESH_MS         = 30_000;
+const REFRESH_MS         = 6_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 function withTimeout(promise, ms) {
