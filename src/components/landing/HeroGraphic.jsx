@@ -493,10 +493,8 @@ export function HeroGraphic() {
   const { status, data, updatedAt, refresh } = useStellarNetwork();
 
   return (
-    <motion.div
+    <div
       className="relative mx-auto flex w-full max-w-[min(100%,400px)] items-center justify-center sm:max-w-md"
-      animate={reduced ? undefined : { y: [0, -6, 0] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
     >
       {/* Ambient background network */}
       <div className="absolute inset-0 overflow-hidden rounded-3xl opacity-50">
@@ -521,6 +519,6 @@ export function HeroGraphic() {
         updatedAt={updatedAt}
         refresh={refresh}
       />
-    </motion.div>
+    </div>
   );
 }
