@@ -127,6 +127,32 @@ async function runScan(query, { signal, prevScore = null } = {}) {
 
   const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
 
+  // ── Counterparties ─────────────────────────────────────────────────────────
+  let counterparties = null;
+  try {
+    const opsPayload = await fetchJson(
+      `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=20`,
+      { signal }
+    );
+    const ops = Array.isArray(opsPayload?._embedded?.records) ? opsPayload._embedded.records : [];
+    const counterIds = new Set();
+    for (const op of ops) {
+      if (op.to && op.to !== accountId)         counterIds.add(op.to);
+      if (op.from && op.from !== accountId)     counterIds.add(op.from);
+      if (op.account && op.account !== accountId) counterIds.add(op.account);
+    }
+    const total = ops.length;
+    const unique = counterIds.size;
+    let knownVerified = 0;
+    await Promise.all([...counterIds].slice(0, 5).map(async (id) => {
+      try {
+        const acc = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(id)}`, { signal });
+        if (acc?.home_domain) knownVerified++;
+      } catch {}
+    }));
+    counterparties = { total, unique, knownVerified };
+  } catch {}
+
   const breakdown = [
     { key: "age",        title: "Account Age",          value: ageDays == null ? "Unknown" : `${ageDays} days`,                              status: ageDays == null ? "Unknown" : ageDays < 14 ? "New" : ageDays < 90 ? "Growing" : "Established", tone: ageDays == null ? "slate" : ageDays < 14 ? "rose" : ageDays < 90 ? "amber" : "emerald", flag: ageDays != null && ageDays < 14 ? "new_account" : null },
     { key: "tx",         title: "Transactions (30d)",   value: txRecentCount?.toLocaleString() ?? "Unknown",                                  status: txRecentCount == null ? "Unknown" : txRecentCount < 5 ? "Very low" : txRecentCount < 25 ? "Low" : "Normal", tone: txRecentCount == null ? "slate" : txRecentCount < 5 ? "rose" : txRecentCount < 25 ? "amber" : "emerald", flag: txPattern !== "normal" ? txPattern : null },
@@ -141,6 +167,7 @@ async function runScan(query, { signal, prevScore = null } = {}) {
     ...riskResult,
     confidence,
     breakdown,
+    counterparties,
     raw: { horizon: HORIZON_URL, accountId },
   };
 }
