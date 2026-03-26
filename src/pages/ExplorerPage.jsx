@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useReducedMotion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { BreakdownGrid } from "../components/explorer/BreakdownGrid";
+import { ContractPanel } from "../components/explorer/ContractPanel";
 import { CounterpartyCard } from "../components/explorer/CounterpartyCard";
 import { EmptyState } from "../components/explorer/EmptyState";
 import { ErrorPanel } from "../components/explorer/ErrorPanel";
@@ -54,12 +55,16 @@ export default function ExplorerPage() {
     setResult(null);
     setError("");
     try {
+      const isContract = input.startsWith("C") && input.length === 56;
+      const endpoint = isContract ? "/api/scan/contract" : "/api/scan";
+      const payload = isContract ? { contractId: input } : { query: input };
+
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 12_000);
-      const res = await fetch("/api/scan", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: input }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       }).finally(() => clearTimeout(t));
       const data = await res.json().catch(() => ({}));
@@ -143,42 +148,50 @@ export default function ExplorerPage() {
                   </div>
                 )}
 
-                <ResultsPanel
-                  result={result}
-                  liveScore={liveScore}
-                  trend={trend}
-                  liveFactors={liveFactors}
-                  streaming={streaming}
-                />
+                {result.type === "contract" ? (
+                  <ContractPanel result={result} />
+                ) : (
+                  <ResultsPanel
+                    result={result}
+                    liveScore={liveScore}
+                    trend={trend}
+                    liveFactors={liveFactors}
+                    streaming={streaming}
+                  />
+                )}
 
-                <ScoreTimeline history={scoreHistory} />
+                <ScoreTimeline history={result.type === "contract" ? result.trend?.history : scoreHistory} />
 
-                <RiskFlagsPanel riskFactors={result.riskFactors} />
+                <RiskFlagsPanel riskFactors={result.type === "contract" ? result.flags : result.riskFactors} />
 
                 <InsightPanel
-                  text={result.insight}
-                  score={liveScore ?? result.score}
-                  action={result.action}
+                  text={result.type === "contract" ? result.summary : result.insight}
+                  score={result.type === "contract" ? result.score : (liveScore ?? result.score)}
+                  action={result.type === "contract" ? result.recommendation : result.action}
                   confidence={result.confidence}
                 />
 
-                <div>
-                  <p className="text-caption text-sentio-text-muted">Supporting detail</p>
-                  <h2 className="text-h2 mt-1 text-sentio-text">Per-metric context</h2>
-                  <p className="mt-1 text-sm text-sentio-text-secondary">From Horizon — grouped for quick scanning.</p>
-                  <div className="mt-5">
-                    <BreakdownGrid items={withIcons(result.breakdown)} />
-                  </div>
-                </div>
+                {result.type !== "contract" && (
+                  <>
+                    <div>
+                      <p className="text-caption text-sentio-text-muted">Supporting detail</p>
+                      <h2 className="text-h2 mt-1 text-sentio-text">Per-metric context</h2>
+                      <p className="mt-1 text-sm text-sentio-text-secondary">From Horizon — grouped for quick scanning.</p>
+                      <div className="mt-5">
+                        <BreakdownGrid items={withIcons(result.breakdown)} />
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
-                  {result.counterparties && (
-                    <CounterpartyCard counterparties={result.counterparties} />
-                  )}
-                  <Card interactive className="p-6 sm:p-8">
-                    <SignalChart items={withIcons(result.breakdown)} />
-                  </Card>
-                </div>
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
+                      {result.counterparties && (
+                        <CounterpartyCard counterparties={result.counterparties} />
+                      )}
+                      <Card interactive className="p-6 sm:p-8">
+                        <SignalChart items={withIcons(result.breakdown)} />
+                      </Card>
+                    </div>
+                  </>
+                )}
               </motion.div>
             ) : idle ? (
               <motion.div key="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.32 }}>

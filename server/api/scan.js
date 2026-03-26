@@ -1,0 +1,210 @@
+import { 
+  HORIZON_URL, 
+  fetchJson, 
+  parseAsset, 
+  isAccount, 
+  normalizeQuery 
+} from "../utils/stellarContext.js";
+import { cacheGet, cacheSet } from "../utils/cache.js";
+import {
+  verifyHomeDomain,
+  analyzeTransactionPatterns,
+  analyzeTrustlines,
+  computeConfidence,
+  computeRisk,
+} from "../riskEngine.js";
+
+/**
+ * Executes a full scan for a Stellar account or asset.
+ * heavily parallelizes all Horizon API calls to minimize latency.
+ */
+export async function runScan(query, { signal, prevScore = null } = {}) {
+  const asset   = parseAsset(query);
+  const isAsset = Boolean(asset);
+  const accountId = isAsset ? asset.issuer : query;
+  let address   = query;
+  let assetSupply = null;
+
+  // ── Parallelize Fetch Phase ───────────────────────────────────────────────
+  
+  let assetPromise = Promise.resolve(null);
+  if (isAsset) {
+    address = asset.raw;
+    assetPromise = fetchJson(
+      `${HORIZON_URL}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
+      { signal }
+    ).catch(() => null); // Silent fallback on failure
+  }
+
+  // Account details
+  const accountPromise = fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
+
+  // Once account yields, immediately kick off domain verification while other tx queries run
+  const domainPromise = accountPromise.then((acc) => 
+    verifyHomeDomain(acc?.home_domain || null, accountId)
+  ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
+
+  // Recent transactions (last 200)
+  const txRecentPromise = fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
+    { signal }
+  ).catch(() => null);
+
+  // Oldest transaction (for account age)
+  const txOldestPromise = fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
+    { signal }
+  ).catch(() => null);
+
+  // Recent operations (for counterparty analysis)
+  const opsPromise = fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=20`,
+    { signal }
+  ).catch(() => null);
+
+  // Await the concurrent wave
+  const [
+    assetsResponse,
+    account,
+    domainInfo,
+    txRecent,
+    txOldest,
+    opsPayload
+  ] = await Promise.all([
+    assetPromise,
+    accountPromise,
+    domainPromise,
+    txRecentPromise,
+    txOldestPromise,
+    opsPromise
+  ]);
+
+  // ── Processing Phase ──────────────────────────────────────────────────────
+
+  if (assetsResponse) {
+    const record = assetsResponse?._embedded?.records?.[0];
+    if (record?.amount != null) { 
+      const p = Number(record.amount); 
+      assetSupply = Number.isFinite(p) ? p : null; 
+    }
+  }
+
+  const { verified: domainVerified, homeDomain: normalizedDomain, accountListed } = domainInfo;
+
+  const balances        = Array.isArray(account?.balances) ? account.balances : [];
+  const trustlinesCount = balances.filter((b) => b?.asset_type && b.asset_type !== "native").length;
+  const { qualityScore: trustlineQuality, flags: trustlineFlags } = analyzeTrustlines(balances);
+
+  const accFlags = account?.flags || {};
+  const flags = [];
+  if (accFlags?.auth_required)  flags.push("auth_required");
+  if (accFlags?.auth_revocable) flags.push("auth_revocable");
+  if (accFlags?.auth_immutable) flags.push("auth_immutable");
+  if (isAsset && account?.clawback_enabled) flags.push("clawback_enabled");
+
+  const now           = Date.now();
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  
+  const recentRecords = Array.isArray(txRecent?._embedded?.records) ? txRecent._embedded.records : [];
+  const txRecentCount = recentRecords.filter((t) => {
+    const c = Date.parse(t?.created_at || "");
+    return Number.isFinite(c) && c >= thirtyDaysAgo;
+  }).length;
+
+  const { pattern: txPattern, flags: txFlags, velocity } = analyzeTransactionPatterns(recentRecords);
+
+  const oldest   = txOldest?._embedded?.records?.[0];
+  const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
+  const ageDays  = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((now - oldestAt) / 86_400_000)) : null;
+
+  const riskResult = computeRisk({
+    ageDays, txRecentCount, trustlinesCount, domainVerified,
+    accountListed: accountListed ?? false, flags, isAsset, assetSupply,
+    txPattern, trustlineFlags, trustlineQuality, velocity, prevScore,
+  });
+
+  const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
+
+  // ── Counterparties ─────────────────────────────────────────────────────────
+  let counterparties = null;
+  if (opsPayload) {
+    const ops = Array.isArray(opsPayload?._embedded?.records) ? opsPayload._embedded.records : [];
+    const counterIds = new Set();
+    for (const op of ops) {
+      if (op.to && op.to !== accountId)           counterIds.add(op.to);
+      if (op.from && op.from !== accountId)       counterIds.add(op.from);
+      if (op.account && op.account !== accountId) counterIds.add(op.account);
+    }
+    const total  = ops.length;
+    const unique = counterIds.size;
+    let knownVerified = 0;
+    
+    // We already do this concurrently for the top 5
+    const cpIds = [...counterIds].slice(0, 5);
+    await Promise.all(cpIds.map(async (id) => {
+      try {
+        const acc = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(id)}`, { signal });
+        if (acc?.home_domain) knownVerified++;
+      } catch {} // Ignoring counterparty fetch failures
+    }));
+    counterparties = { total, unique, knownVerified };
+  }
+
+  // ── Breakdown Rendering ───────────────────────────────────────────────────
+  const breakdown = [
+    { key: "age",        title: "Account Age",          value: ageDays == null ? "Unknown" : `${ageDays} days`,                              status: ageDays == null ? "Unknown" : ageDays < 14 ? "New" : ageDays < 90 ? "Growing" : "Established", tone: ageDays == null ? "slate" : ageDays < 14 ? "rose" : ageDays < 90 ? "amber" : "emerald", flag: ageDays != null && ageDays < 14 ? "new_account" : null },
+    { key: "tx",         title: "Transactions (30d)",   value: txRecentCount?.toLocaleString() ?? "Unknown",                                  status: txRecentCount == null ? "Unknown" : txRecentCount < 5 ? "Very low" : txRecentCount < 25 ? "Low" : "Normal", tone: txRecentCount == null ? "slate" : txRecentCount < 5 ? "rose" : txRecentCount < 25 ? "amber" : "emerald", flag: txPattern !== "normal" ? txPattern : null },
+    { key: "trustlines", title: "Trustlines",            value: trustlinesCount == null ? "Unknown" : String(trustlinesCount),                status: trustlinesCount == null ? "Unknown" : trustlinesCount === 0 ? "None" : trustlinesCount < 10 ? "Typical" : "Broad", tone: trustlinesCount == null ? "slate" : trustlinesCount === 0 ? "amber" : trustlineQuality < 70 ? "amber" : "emerald", flag: trustlineFlags.length > 0 ? "lookalike" : null },
+    { key: "domain",     title: "Domain Status",         value: normalizedDomain || "—",                                                       status: domainVerified ? (accountListed ? "Verified + Listed" : "Verified") : "Unverified", tone: domainVerified ? "emerald" : "rose", flag: !domainVerified ? "no_domain" : null },
+    { key: "supply",     title: "Asset Supply",          value: isAsset ? (assetSupply?.toLocaleString() ?? "Unknown") : "—",                 status: !isAsset ? "N/A" : assetSupply == null ? "Unknown" : assetSupply > 600_000_000 ? "Elevated" : "Normal", tone: !isAsset ? "slate" : assetSupply == null ? "slate" : assetSupply > 600_000_000 ? "amber" : "emerald", flag: isAsset && assetSupply > 600_000_000 ? "high_supply" : null },
+    { key: "flags",      title: "Flags",                 value: String(flags.length),                                                          status: flags.length ? "Present" : "None", tone: flags.length ? "amber" : "emerald", flag: flags.includes("clawback_enabled") ? "clawback" : flags.length > 0 ? "flagged" : null },
+  ];
+
+  return {
+    input: query, isAsset, address,
+    ...riskResult,
+    confidence,
+    breakdown,
+    counterparties,
+    raw: { horizon: HORIZON_URL, accountId },
+  };
+}
+
+/**
+ * Express handler for POST /api/scan (Accounts & Assets)
+ */
+export async function scanHandler(req, res) {
+  try {
+    const query = normalizeQuery(req.body?.query ?? "");
+    if (!query) return res.status(400).json({ error: "Missing query" });
+
+    const asset   = parseAsset(query);
+    const isAsset = Boolean(asset);
+    if (!isAsset && !isAccount(query)) {
+      return res.status(400).json({ error: "Invalid input. Use a Stellar account (G...) or CODE:ISSUER." });
+    }
+
+    const cacheKey = isAsset ? `asset:${asset.code}:${asset.issuer}` : `account:${query}`;
+    const cached   = cacheGet(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
+
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 14_000); // 14s timeout
+    try {
+      const result = await runScan(query, { signal: controller.signal });
+      cacheSet(cacheKey, result);
+      return res.json(result);
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    console.error("[scan error]", err?.message);
+    const status = err?.status === 404 ? 404 : 500;
+    const message = err?.status === 404
+      ? "Not found on Stellar network."
+      : err?.name === "AbortError"
+        ? "Request timed out. Please try again."
+        : "Scan failed. Please try again.";
+    return res.status(status).json({ error: message });
+  }
+}

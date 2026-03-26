@@ -31,6 +31,10 @@ export function ExplorerHero({ query, setQuery, onScan, loading }) {
             <kbd className="rounded border border-white/8 bg-sentio-surface/80 px-1.5 py-0.5 font-mono text-[0.7rem]">
               CODE:ISSUER
             </kbd>
+            . Contracts start with{" "}
+            <kbd className="rounded border border-white/8 bg-sentio-surface/80 px-1.5 py-0.5 font-mono text-[0.7rem]">
+              C
+            </kbd>
             .
           </p>
         </div>
