@@ -2,17 +2,17 @@ import { motion } from "framer-motion";
 import { cn } from "../lib/cn";
 
 const tier = {
-  base: "border-sentio-border bg-[var(--surface-base)] shadow-sentio-md",
+  base: "border-sentio-border bg-(--surface-base) shadow-sentio-md",
   elevated:
-    "border-sentio-border bg-[var(--surface-elevated)] shadow-sentio-md shadow-[var(--shadow-sentio-glow)]",
+    "border-sentio-border bg-(--surface-elevated) shadow-sentio-md shadow-(--shadow-sentio-glow)",
   highlight:
-    "border-violet-500/20 bg-[var(--surface-highlight)] shadow-sentio-md ring-1 ring-violet-500/15 ring-inset ring-white/[0.03]",
+    "border-violet-500/20 bg-(--surface-highlight) shadow-sentio-md ring-1 ring-violet-500/15 ring-inset ring-white/3",
   interactive:
-    "border-sentio-border bg-[var(--surface-base)] shadow-sentio-md transition-shadow duration-200 hover:shadow-[0_8px_40px_-8px_rgba(124,58,237,0.2)]",
+    "border-sentio-border bg-(--surface-base) shadow-sentio-md transition-shadow duration-200 hover:shadow-[0_8px_40px_-8px_rgba(124,58,237,0.2)]",
 };
 
 const shell =
-  "rounded-sentio-2xl backdrop-blur-xl ring-1 ring-white/[0.04] [box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)]";
+  "rounded-sentio-2xl backdrop-blur-xl ring-1 ring-white/4 [box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)]";
 
 export function Card({
   as: Tag = "div",

@@ -13,9 +13,9 @@ export const buttonClasses = ({ variant = "primary" } = {}) =>
     "disabled:pointer-events-none disabled:opacity-45",
     variant === "primary" &&
       cn(
-        "bg-sentio-primary text-white shadow-[var(--shadow-sentio-glow)]",
+        "bg-sentio-primary text-white shadow-(--shadow-sentio-glow)",
         "hover:bg-sentio-primary-hover hover:shadow-[0_0_32px_-6px_rgba(124,58,237,0.55)] hover:brightness-[1.02]",
-        "active:brightness-[0.96] active:shadow-[var(--shadow-sentio-glow)]"
+        "active:brightness-[0.96] active:shadow-(--shadow-sentio-glow)"
       ),
     variant === "secondary" &&
       cn(
@@ -24,7 +24,7 @@ export const buttonClasses = ({ variant = "primary" } = {}) =>
         "active:brightness-[0.97]"
       ),
     variant === "ghost" &&
-      "text-sentio-text-secondary hover:bg-white/[0.06] hover:text-sentio-text active:bg-white/[0.08]",
+      "text-sentio-text-secondary hover:bg-white/6 hover:text-sentio-text active:bg-white/8",
     variant === "danger" &&
       "border border-rose-400/25 bg-sentio-danger-bg text-rose-100 hover:bg-rose-500/15 active:brightness-95"
   );

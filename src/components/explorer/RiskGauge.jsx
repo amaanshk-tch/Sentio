@@ -35,7 +35,7 @@ export function RiskGauge({ score }) {
   return (
     <div className="flex flex-col items-center">
       <div className={cn("relative grid place-items-center", classes.glow)} style={{ width: 220, height: 220 }}>
-        <div className="absolute inset-0 rounded-full bg-linear-to-br from-white/[0.07] to-transparent blur-sm" />
+        <div className="absolute inset-0 rounded-full bg-linear-to-br from-white/7 to-transparent blur-sm" />
         <svg width="220" height="220" className="relative" aria-hidden>
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
@@ -75,7 +75,7 @@ export function RiskGauge({ score }) {
 
       <div className="mt-6 flex flex-col items-center gap-2">
         <div className={cn("text-sm font-semibold", classes.text)}>{scoreLabel(score)}</div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-xs font-medium text-sentio-text-secondary">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs font-medium text-sentio-text-secondary">
           <BadgeCheck className="h-3.5 w-3.5 text-sentio-accent" aria-hidden />
           0–100 composite
         </div>

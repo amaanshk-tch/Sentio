@@ -6,7 +6,7 @@ export function TabList({ className, children }) {
     <div
       role="tablist"
       className={cn(
-        "relative inline-flex gap-0.5 overflow-visible rounded-xl border border-white/[0.08] bg-sentio-elevated/80 p-1 backdrop-blur-md",
+        "relative inline-flex gap-0.5 overflow-visible rounded-xl border border-white/8 bg-sentio-elevated/80 p-1 backdrop-blur-md",
         className
       )}
     >
@@ -32,7 +32,7 @@ export function Tab({ selected, onSelect, children, className, groupId = "sentio
       {selected ? (
         <motion.span
           layoutId={`${groupId}-indicator`}
-          className="absolute inset-0 -z-10 rounded-lg bg-white/[0.09] shadow-sentio-sm ring-1 ring-white/[0.06]"
+          className="absolute inset-0 -z-10 rounded-lg bg-white/9 shadow-sentio-sm ring-1 ring-white/6"
           transition={{ type: "spring", stiffness: 440, damping: 34 }}
         />
       ) : null}

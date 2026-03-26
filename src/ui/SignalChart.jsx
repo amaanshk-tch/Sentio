@@ -29,7 +29,7 @@ export function SignalChart({ items, className }) {
                 <span className="truncate font-medium text-sentio-text-secondary">{it.title}</span>
                 <span className="shrink-0 tabular-nums text-sentio-text-muted">{it.status}</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/[0.06] ring-1 ring-white/[0.04]">
+              <div className="h-2 overflow-hidden rounded-full bg-white/6 ring-1 ring-white/4">
                 <motion.div
                   className={cn("h-full rounded-full bg-linear-to-r", toneBarClass(it.tone))}
                   initial={{ width: 0 }}

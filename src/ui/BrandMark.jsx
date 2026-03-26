@@ -5,7 +5,7 @@ import { cn } from "../lib/cn";
 export function BrandMark({ to, className, size = "md" }) {
   const sizes = {
     sm: { wrap: "h-8 w-8 rounded-lg", icon: "h-4 w-4", text: "text-base" },
-    md: { wrap: "h-9 w-9 rounded-xl", icon: "h-[18px] w-[18px]", text: "text-lg" },
+    md: { wrap: "h-9 w-9 rounded-xl", icon: "h-4.5 w-4.5", text: "text-lg" },
     lg: { wrap: "h-11 w-11 rounded-2xl", icon: "h-5 w-5", text: "text-xl" },
   };
   const s = sizes[size] ?? sizes.md;

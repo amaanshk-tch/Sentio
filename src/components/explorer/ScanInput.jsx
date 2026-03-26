@@ -22,7 +22,7 @@ export function ScanInput({ query, setQuery, onScan, loading }) {
           autoComplete="off"
           spellCheck={false}
           className={cn(
-            "h-14 w-full rounded-xl border border-white/[0.1] bg-sentio-elevated/95 pl-12 pr-4 text-sm text-sentio-text shadow-sentio-sm placeholder:text-sentio-text-subtle",
+            "h-14 w-full rounded-xl border border-white/10 bg-sentio-elevated/95 pl-12 pr-4 text-sm text-sentio-text shadow-sentio-sm placeholder:text-sentio-text-subtle",
             "outline-none ring-0 transition",
             "focus:border-violet-400/40 focus:bg-sentio-surface focus:shadow-[0_0_0_3px_rgba(124,58,237,0.18)]"
           )}

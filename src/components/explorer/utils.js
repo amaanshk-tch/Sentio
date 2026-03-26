@@ -78,7 +78,7 @@ export function withIcons(items) {
 export function toneCardShell(tone) {
   switch (tone) {
     case "emerald":
-      return "border-rose-500/20 bg-rose-500/6 ring-rose-500/10";
+      return "border-emerald-500/20 bg-emerald-500/5 ring-emerald-500/10";
     default:
       return "border-white/8 bg-white/3 ring-white/4";
   }

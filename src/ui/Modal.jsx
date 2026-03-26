@@ -32,7 +32,7 @@ export function Modal({ open, onClose, title, description, children, className }
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-[200] flex items-end justify-center p-4 sm:items-center"
+          className="fixed inset-0 z-200 flex items-end justify-center p-4 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -53,8 +53,8 @@ export function Modal({ open, onClose, title, description, children, className }
             aria-labelledby={title ? titleId : undefined}
             aria-describedby={description ? descId : undefined}
             className={cn(
-              "relative z-10 w-full max-w-lg rounded-sentio-2xl border border-white/[0.1] bg-sentio-elevated/95 p-6 shadow-sentio-lg backdrop-blur-xl",
-              "ring-1 ring-white/[0.06]",
+              "relative z-10 w-full max-w-lg rounded-sentio-2xl border border-white/10 bg-sentio-elevated/95 p-6 shadow-sentio-lg backdrop-blur-xl",
+              "ring-1 ring-white/6",
               className
             )}
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
@@ -78,7 +78,7 @@ export function Modal({ open, onClose, title, description, children, className }
               <button
                 type="button"
                 onClick={onClose}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-sentio-text-secondary transition hover:bg-white/[0.08] hover:text-sentio-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/8 bg-white/4 text-sentio-text-secondary transition hover:bg-white/8 hover:text-sentio-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400/70"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>

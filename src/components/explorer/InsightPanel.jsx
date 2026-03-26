@@ -8,7 +8,7 @@ export function InsightPanel({ text, score }) {
     severity === "ok"
       ? {
           border: "border-emerald-400/20",
-          bg: "bg-emerald-500/[0.07]",
+          bg: "bg-emerald-500/7",
           icon: CheckCircle2,
           iconWrap: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
           title: "Readout",
@@ -16,14 +16,14 @@ export function InsightPanel({ text, score }) {
       : severity === "warn"
         ? {
             border: "border-amber-400/22",
-            bg: "bg-amber-500/[0.08]",
+            bg: "bg-amber-500/8",
             icon: AlertTriangle,
             iconWrap: "bg-amber-500/15 text-amber-100 ring-amber-400/25",
             title: "Readout",
           }
         : {
             border: "border-rose-400/22",
-            bg: "bg-rose-500/[0.08]",
+            bg: "bg-rose-500/8",
             icon: AlertTriangle,
             iconWrap: "bg-rose-500/15 text-rose-100 ring-rose-400/25",
             title: "Readout",
