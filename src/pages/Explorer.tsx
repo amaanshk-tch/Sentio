@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "@/components/landing/BrandMark";
-import { AmbientLayer } from "@/components/landing/AmbientLayer";
+import { PageLayout } from "@/components/layout/PageLayout";
 import {
   searchStellar, fetchAccountTransactions,
   type HorizonAccount, type HorizonAsset, type HorizonTransaction,
@@ -527,230 +527,210 @@ export default function Explorer() {
   const isLoading = state.status === "loading";
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <AmbientLayer />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 pb-20 sm:px-8">
-        {/* Navbar */}
-        <header className="flex items-center justify-between gap-4 py-5">
-          <BrandMark to="/" size="md" />
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
-        </header>
-
-        {/* Page title */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="mb-8"
+    <PageLayout>
+      {/* Navbar */}
+      <header className="flex items-center justify-between gap-4 py-5">
+        <BrandMark to="/" size="md" />
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
         >
-          <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
-            Stellar Risk Explorer
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Link>
+      </header>
+
+      {/* Page title */}
+      <div className="mb-8 animate-fade-in-up">
+        <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
+          Stellar Risk Explorer
+        </span>
+        <h1 className="text-display mt-4 max-w-[24ch]">
+          Analyse any <strong>account</strong> or{" "}
+          <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-bold text-transparent">
+            asset
           </span>
-          <h1 className="text-display mt-4 max-w-[24ch]">
-            Analyse any <strong>account</strong> or{" "}
-            <span className="bg-linear-to-r from-accent to-primary bg-clip-text text-transparent">
-              asset
-            </span>
-          </h1>
-          <p className="text-body-lg mt-3 max-w-lg">
-            Enter a Stellar account address (G...) or asset code (e.g. USDC or USDC:GXXX...) to get a live risk analysis.
-          </p>
-        </motion.div>
+        </h1>
+        <p className="text-body-lg mt-3 max-w-lg">
+          Enter a Stellar account address (G...) or asset code (e.g. USDC or USDC:GXXX...) to get a live risk analysis.
+        </p>
+      </div>
 
-        {/* Search bar */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.4 }}
-          className="mb-8"
+      {/* Search bar */}
+      <div className="mb-8">
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
+          className="flex gap-2"
         >
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-            className="flex gap-2"
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sentio-text-muted" />
+            <input
+              ref={inputRef}
+              id="explorer-search"
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="GXXXXXX... or USDC or USDC:GXXXX..."
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-3.5 pl-11 pr-4 font-mono text-sm text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+          <button
+            id="explorer-scan-btn"
+            type="submit"
+            disabled={!query.trim() || isLoading}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sentio-text-muted" />
-              <input
-                ref={inputRef}
-                id="explorer-search"
-                type="text"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="GXXXXXX... or USDC or USDC:GXXXX..."
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-3.5 pl-11 pr-4 font-mono text-sm text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-              />
+            {isLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Scanning…
+              </>
+            ) : (
+              <>
+                <Shield className="h-4 w-4" />
+                Scan
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Example hints */}
+        {state.status === "idle" && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX",
+              "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+              "XLM",
+            ].map(ex => (
+              <button
+                key={ex}
+                onClick={() => { setQuery(ex); handleSearch(ex); }}
+                className="rounded-lg border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 font-mono text-[0.7rem] text-sentio-text-muted transition hover:text-foreground"
+              >
+                {ex.length > 30 ? `${ex.slice(0, 18)}…` : ex}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Results & Errors */}
+      <AnimatePresence mode="wait">
+        {state.status === "error" && (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-6 flex items-start gap-3 rounded-2xl border border-sentio-danger/20 bg-sentio-danger/8 p-4"
+          >
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sentio-danger" />
+            <div>
+              <p className="text-sm font-semibold text-sentio-danger">Scan failed</p>
+              <p className="mt-0.5 text-xs text-sentio-danger/80">{state.message}</p>
             </div>
             <button
-              id="explorer-scan-btn"
-              type="submit"
-              disabled={!query.trim() || isLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={reset}
+              className="ml-auto text-xs text-sentio-text-muted hover:text-foreground"
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Scanning…
-                </>
-              ) : (
-                <>
-                  <Shield className="h-4 w-4" />
-                  Scan
-                </>
-              )}
+              Dismiss
             </button>
-          </form>
+          </motion.div>
+        )}
 
-          {/* Example hints */}
-          {state.status === "idle" && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[
-                "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX",
-                "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-                "XLM",
-              ].map(ex => (
-                <button
-                  key={ex}
-                  onClick={() => { setQuery(ex); handleSearch(ex); }}
-                  className="rounded-lg border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 font-mono text-[0.7rem] text-sentio-text-muted transition hover:text-foreground"
-                >
-                  {ex.length > 30 ? `${ex.slice(0, 18)}…` : ex}
-                </button>
-              ))}
+        {isLoading && (
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="grid gap-6 lg:grid-cols-[280px_1fr]"
+          >
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+              <Skeleton className="h-[140px] w-[140px] rounded-full" />
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-2 w-40" />
+              <Skeleton className="h-2 w-36" />
+              <div className="mt-2 w-full space-y-2">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
             </div>
-          )}
-        </motion.div>
+            <div className="space-y-4">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-36 w-full" />)}
+            </div>
+          </motion.div>
+        )}
 
-        {/* Error */}
-        <AnimatePresence mode="wait">
-          {state.status === "error" && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mb-6 flex items-start gap-3 rounded-2xl border border-sentio-danger/20 bg-sentio-danger/8 p-4"
-            >
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sentio-danger" />
-              <div>
-                <p className="text-sm font-semibold text-sentio-danger">Scan failed</p>
-                <p className="mt-0.5 text-xs text-sentio-danger/80">{state.message}</p>
-              </div>
-              <button
-                onClick={reset}
-                className="ml-auto text-xs text-sentio-text-muted hover:text-foreground"
-              >
-                Dismiss
-              </button>
-            </motion.div>
-          )}
-
-          {/* Loading skeleton */}
-          {isLoading && (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="grid gap-6 lg:grid-cols-[280px_1fr]"
-            >
-              <div className="flex flex-col items-center gap-4 rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
-                <Skeleton className="h-[140px] w-[140px] rounded-full" />
-                <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-2 w-40" />
-                <Skeleton className="h-2 w-36" />
-                <div className="mt-2 w-full space-y-2">
-                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-                </div>
-              </div>
-              <div className="space-y-4">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-36 w-full" />)}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Results */}
-          {isDone && state.status === "done" && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-6 lg:grid-cols-[300px_1fr]"
-            >
-              {/* Left: Risk panel */}
-              <div className="space-y-4">
-                {/* Score card */}
-                <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
-                  <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
-                    Risk Score
-                  </p>
-                  <div className="flex justify-center">
-                    <RiskRing
-                      score={state.risk.overallScore}
-                      color={state.risk.color}
-                      label={state.risk.label}
-                    />
-                  </div>
-                  <p className="mt-4 text-center text-xs text-sentio-text-muted">
-                    {state.risk.summary}
-                  </p>
-                </div>
-
-                {/* Mode badge */}
-                <div className="flex items-center gap-2 rounded-xl border border-foreground/6 bg-sentio-surface/40 px-4 py-2.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span className="text-xs text-sentio-text-muted capitalize">
-                    {state.mode === "account" ? "Stellar Account" : "Stellar Asset"}
-                  </span>
-                  <button
-                    onClick={reset}
-                    className="ml-auto text-[0.65rem] text-sentio-text-muted hover:text-foreground"
-                  >
-                    New scan
-                  </button>
-                </div>
-
-                {/* Risk factors */}
-                <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-                  <div className="mb-3 flex items-center gap-1.5">
-                    <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
-                      Risk Factors
-                    </p>
-                    <Info className="h-3 w-3 text-sentio-text-muted" />
-                  </div>
-                  <div className="space-y-2">
-                    {state.risk.factors.map(f => (
-                      <FactorRow key={f.id} factor={f} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right: Detail panels */}
-              <div>
-                {state.mode === "account" && state.account && (
-                  <AccountPanel
-                    account={state.account}
-                    risk={state.risk}
-                    txns={state.txns}
+        {isDone && state.status === "done" && (
+          <motion.div
+            key="results"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="grid gap-6 lg:grid-cols-[300px_1fr]"
+          >
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+                <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
+                  Risk Score
+                </p>
+                <div className="flex justify-center">
+                  <RiskRing
+                    score={state.risk.overallScore}
+                    color={state.risk.color}
+                    label={state.risk.label}
                   />
-                )}
-                {state.mode === "asset" && state.asset && (
-                  <AssetPanel asset={state.asset} risk={state.risk} />
-                )}
+                </div>
+                <p className="mt-4 text-center text-xs text-sentio-text-muted">
+                  {state.risk.summary}
+                </p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
+
+              <div className="flex items-center gap-2 rounded-xl border border-foreground/6 bg-sentio-surface/40 px-4 py-2.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <span className="text-xs text-sentio-text-muted capitalize">
+                  {state.mode === "account" ? "Stellar Account" : "Stellar Asset"}
+                </span>
+                <button
+                  onClick={reset}
+                  className="ml-auto text-[0.65rem] text-sentio-text-muted hover:text-foreground"
+                >
+                  New scan
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
+                <div className="mb-3 flex items-center gap-1.5">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
+                    Risk Factors
+                  </p>
+                  <Info className="h-3 w-3 text-sentio-text-muted" />
+                </div>
+                <div className="space-y-2">
+                  {state.risk.factors.map(f => (
+                    <FactorRow key={f.id} factor={f} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              {state.mode === "account" && state.account && (
+                <AccountPanel
+                  account={state.account}
+                  risk={state.risk}
+                  txns={state.txns}
+                />
+              )}
+              {state.mode === "asset" && state.asset && (
+                <AssetPanel asset={state.asset} risk={state.risk} />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </PageLayout>
   );
 }
