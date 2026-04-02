@@ -532,7 +532,7 @@ export default function Explorer() {
     <PageLayout>
       {/* Navbar */}
       <header className="flex items-center justify-between gap-4 py-5">
-        <BrandMark to="/" size="md" />
+        <BrandMark to="/" size="lg" />
         <Link
           to="/"
           className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"

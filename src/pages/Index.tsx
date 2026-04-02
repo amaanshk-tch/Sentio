@@ -9,7 +9,7 @@ export default function Index() {
 
       <footer className="mt-16 border-t border-foreground/6 pt-10">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-          <BrandMark size="sm" />
+          <BrandMark to="/" size="xs" />
           <p className="text-sm text-sentio-text-muted">
             © {new Date().getFullYear()} Sentio
           </p>

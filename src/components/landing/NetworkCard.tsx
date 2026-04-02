@@ -254,28 +254,17 @@ export function NetworkCard() {
         {/* ── Header ── */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/25">
-              <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden>
-                <path
-                  d="M8 1.5l1.6 4.6H14l-3.8 2.8 1.5 4.6L8 10.8l-3.7 2.7 1.5-4.6L2 6.1h4.4z"
-                  fill="none"
-                  stroke="hsl(263,70%,75%)"
-                  strokeWidth="1.15"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
             <span className="text-[0.6rem] font-semibold tracking-widest text-sentio-text-muted">
               STELLAR NETWORK
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="relative flex h-1.5 w-1.5">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sentio-success opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sentio-success" />
+              <span className="relative inline-flex h-2 w-2 animate-live-beat rounded-full bg-sentio-success shadow-[0_0_10px_hsl(var(--sentio-success))]" />
             </span>
-            <span className="text-[0.6rem] font-medium text-sentio-success">LIVE</span>
+            <span className="text-[0.65rem] font-bold tracking-wide text-sentio-success">LIVE</span>
           </div>
         </div>
 

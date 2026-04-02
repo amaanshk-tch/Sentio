@@ -24,7 +24,7 @@ export function LandingHero() {
         transition={{ duration: 0.4 }}
         className="flex items-center justify-between gap-4 py-5"
       >
-        <BrandMark to="/" size="md" />
+        <BrandMark to="/" size="lg" />
         <Link
           to="/explorer"
           className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition-all hover:border-foreground/20 hover:bg-sentio-surface-hover hover:shadow-sentio-md"
