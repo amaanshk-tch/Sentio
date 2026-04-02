@@ -1,17 +1,16 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { ArrowRight, Compass } from "lucide-react";
 import { Link } from "react-router-dom";
 import { GlowButton } from "./GlowButton";
 import { BrandMark } from "./BrandMark";
 import { NetworkCard } from "./NetworkCard";
-import { RiskScanSim } from "./RiskScanSim";
 
-const fade = {
+const fade: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: 0.07 * i, duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+    transition: { delay: 0.07 * i, duration: 0.45, ease: [0.22, 1, 0.36, 1] as any },
   }),
 };
 
@@ -54,7 +53,7 @@ export function LandingHero() {
             className="text-display mt-6 max-w-[20ch] text-balance"
           >
             Know if it&apos;s <strong>safe</strong> before you{" "}
-            <span className="bg-gradient-to-r from-accent to-primary bg-clip-text font-semibold text-transparent">
+            <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-semibold text-transparent">
               click
             </span>
             .
@@ -100,9 +99,9 @@ export function LandingHero() {
           </motion.ul>
         </div>
 
-        {/* Right: cards — properly aligned */}
+        {/* Right: card — centered */}
         <motion.div
-          className="relative flex flex-col items-center gap-6 lg:items-end"
+          className="relative flex flex-col items-center justify-center lg:items-end"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.3 }}
@@ -110,11 +109,6 @@ export function LandingHero() {
           {/* Network card */}
           <div className="w-full max-w-[400px] animate-float" style={{ animationDelay: "0s" }}>
             <NetworkCard />
-          </div>
-
-          {/* Risk scan sim — offset left for visual interest */}
-          <div className="self-start lg:self-center animate-float" style={{ animationDelay: "1.5s" }}>
-            <RiskScanSim />
           </div>
         </motion.div>
       </div>

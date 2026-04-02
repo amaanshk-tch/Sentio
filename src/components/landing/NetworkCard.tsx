@@ -1,167 +1,260 @@
-import { motion } from "framer-motion";
-import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { RefreshCw, ExternalLink } from "lucide-react";
 
-/* ─── Animated count-up hook ──────────────────────────────── */
-function useCountUp(target: number | null, duration = 1300, delay = 350) {
+// ─── Horizon data fetcher ─────────────────────────────────────────────────────
+
+const HORIZON = "https://horizon.stellar.org";
+
+interface NetworkMetrics {
+  ledger: number;
+  txSuccessPct: number;
+  ops24h: number;
+  avgCloseTime: number;
+  status: "Stable" | "Degraded" | "Unknown";
+  updatedAt: Date;
+}
+
+async function fetchMetrics(): Promise<NetworkMetrics> {
+  const res = await fetch(`${HORIZON}/ledgers?order=desc&limit=50`);
+  if (!res.ok) throw new Error("Horizon error");
+  const data = await res.json();
+  const ledgers: {
+    sequence: number;
+    closed_at: string;
+    successful_transaction_count: number;
+    failed_transaction_count: number;
+    operation_count: number;
+  }[] = data._embedded?.records ?? [];
+
+  if (ledgers.length === 0) throw new Error("No ledger data");
+
+  const latest = ledgers[0];
+  const oldest = ledgers[ledgers.length - 1];
+
+  const totalSuccess = ledgers.reduce((s, l) => s + l.successful_transaction_count, 0);
+  const totalFailed = ledgers.reduce((s, l) => s + l.failed_transaction_count, 0);
+  const totalTx = totalSuccess + totalFailed;
+  const txSuccessPct = totalTx > 0 ? Math.round((totalSuccess / totalTx) * 100) : 100;
+
+  const latestTs = new Date(latest.closed_at).getTime();
+  const oldestTs = new Date(oldest.closed_at).getTime();
+  const spanMs = latestTs - oldestTs;
+  const avgCloseTime = ledgers.length > 1 ? spanMs / (ledgers.length - 1) / 1000 : 5;
+
+  const opsPerLedger = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
+  const ledgersPerDay = (24 * 3600) / avgCloseTime;
+  const ops24h = Math.round(opsPerLedger * ledgersPerDay);
+
+  const status: NetworkMetrics["status"] =
+    avgCloseTime < 8 ? "Stable" : avgCloseTime < 15 ? "Degraded" : "Unknown";
+
+  return {
+    ledger: latest.sequence,
+    txSuccessPct,
+    ops24h,
+    avgCloseTime: Math.round(avgCloseTime * 10) / 10,
+    status,
+    updatedAt: new Date(),
+  };
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtLarge(n: number) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
+
+
+// ─── Count-up ─────────────────────────────────────────────────────────────────
+
+function useCountUp(target: number | null, duration = 900) {
   const [val, setVal] = useState<number | null>(null);
   const prevRef = useRef(0);
 
   useEffect(() => {
-    if (target === null) {
-      setVal(null);
-      return;
-    }
+    if (target === null) { setVal(null); return; }
     const from = prevRef.current;
     prevRef.current = target;
-
-    const timeout = setTimeout(() => {
-      const start = performance.now();
-      let raf: number;
-      function tick(now: number) {
-        const p = Math.min((now - start) / duration, 1);
-        const eased = 1 - Math.pow(1 - p, 3);
-        setVal(Math.round(from + (target - from) * eased));
-        if (p < 1) raf = requestAnimationFrame(tick);
-      }
-      raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }, delay);
-
-    return () => clearTimeout(timeout);
-  }, [target, duration, delay]);
+    const start = performance.now();
+    let raf: number;
+    function tick(now: number) {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(from + ((target as number) - from) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
 
   return val;
 }
 
-function fmtLarge(n: number | null) {
-  if (n === null) return "—";
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
-  return n.toLocaleString();
+// ─── Countdown ring refresh button ───────────────────────────────────────────
+
+const REFRESH_INTERVAL = 10;
+
+function CountdownRing({ onRefresh }: { onRefresh: () => void }) {
+  return (
+    <button
+      onClick={onRefresh}
+      title="Refresh now"
+      aria-label="Refresh network data"
+      className="group relative flex h-5 w-5 items-center justify-center rounded-lg bg-foreground/5 transition-colors hover:bg-foreground/10"
+    >
+      <RefreshCw
+        className="h-3 w-3 text-sentio-text-muted transition-colors group-hover:text-foreground"
+      />
+    </button>
+  );
 }
 
-/* ─── Static demo data (no external API needed) ──────────── */
-const DEMO_METRICS = {
-  accounts: 8_200_000,
-  assets: 94_300,
-  ops24h: 12_700_000,
-};
+// ─── Stat tile ────────────────────────────────────────────────────────────────
 
-function MetricTile({ label, value }: { label: string; value: number }) {
-  const animated = useCountUp(value);
+function StatTile({
+  label, value, sub, loading,
+}: {
+  label: string;
+  value: string | null;
+  sub?: string;
+  loading: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-foreground/5 bg-background/40 p-3.5 backdrop-blur-sm">
+    <div className="flex flex-col gap-1 rounded-xl border border-foreground/6 bg-background/30 p-3.5 backdrop-blur-sm">
       <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
         {label}
       </span>
-      <span className="font-mono text-lg font-semibold tracking-tight text-foreground">
-        {animated !== null ? fmtLarge(animated) : <span className="sentio-shimmer inline-block h-5 w-16 rounded" />}
-      </span>
+      {loading || value === null ? (
+        <span className="sentio-shimmer mt-1 inline-block h-6 w-20 rounded" />
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={value}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.22 }}
+            className="font-mono text-xl font-bold tracking-tight text-foreground"
+          >
+            {value}
+          </motion.span>
+        </AnimatePresence>
+      )}
+      {sub && <span className="mt-0.5 text-[0.6rem] text-sentio-text-muted">{sub}</span>}
     </div>
   );
 }
 
-/* ─── Network node SVG background ────────────────────────── */
-function NetworkNodes() {
-  const nodes = [
-    { x: 50, y: 50, r: 3, hub: true },
-    { x: 16, y: 20, r: 1.8 },
-    { x: 82, y: 14, r: 1.6 },
-    { x: 90, y: 55, r: 2.0 },
-    { x: 70, y: 86, r: 1.5 },
-    { x: 28, y: 82, r: 1.8 },
-    { x: 8, y: 54, r: 1.4 },
-    { x: 52, y: 8, r: 1.5 },
-    { x: 38, y: 36, r: 1.2 },
-    { x: 66, y: 32, r: 1.3 },
-  ];
+// ─── Network status tile ──────────────────────────────────────────────────────
 
-  const edges: [number, number][] = [
-    [0, 1], [0, 2], [0, 3], [0, 4], [0, 5],
-    [0, 8], [0, 9], [1, 6], [1, 7], [2, 7],
-    [2, 9], [3, 9], [4, 5], [5, 6], [8, 1],
-  ];
+function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
+  const color =
+    status === "Stable"   ? "hsl(43 96% 56%)"  :
+    status === "Degraded" ? "hsl(25 95% 55%)"  : "hsl(0 0% 50%)";
+  const badgeCls =
+    status === "Stable"   ? "border-yellow-500/25 bg-yellow-500/10"  :
+    status === "Degraded" ? "border-orange-500/25 bg-orange-500/10" :
+    "border-foreground/10 bg-foreground/5";
 
   return (
-    <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <radialGradient id="hub-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="hsl(263,70%,58%)" stopOpacity="0.7" />
-          <stop offset="100%" stopColor="hsl(263,70%,58%)" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="edge-g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="hsl(263,70%,65%)" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="hsl(185,100%,50%)" stopOpacity="0.08" />
-        </linearGradient>
-      </defs>
-
-      {edges.map(([a, b], i) => (
-        <motion.line
-          key={i}
-          x1={nodes[a].x} y1={nodes[a].y}
-          x2={nodes[b].x} y2={nodes[b].y}
-          stroke="url(#edge-g)"
-          strokeWidth="0.3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 + i * 0.03, duration: 0.55 }}
-        />
-      ))}
-
-      {nodes.filter(n => !n.hub).map((n, i) => (
-        <motion.circle
-          key={i}
-          cx={n.x} cy={n.y} r={n.r}
-          fill="hsl(263,70%,60%)"
-          fillOpacity={0.5}
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: [0.4, 0.8, 0.4], scale: 1 }}
-          transition={{
-            opacity: { duration: 3 + i * 0.4, repeat: Infinity, ease: "easeInOut" },
-            scale: { delay: 0.35 + i * 0.045, type: "spring", stiffness: 240, damping: 20 },
-          }}
-        />
-      ))}
-
-      <motion.circle
-        cx="50" cy="50" r="8"
-        fill="url(#hub-glow)"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-      />
-      <motion.circle
-        cx="50" cy="50" r="2.8"
-        fill="hsl(263,70%,58%)"
-        stroke="hsl(263,70%,80%)"
-        strokeWidth="0.6"
-        animate={{ opacity: [0.7, 1, 0.7] }}
-        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-      />
-    </svg>
+    <div className="flex flex-col gap-1 rounded-xl border border-foreground/6 bg-background/30 p-3.5 backdrop-blur-sm">
+      <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
+        Network Status
+      </span>
+      {status === null ? (
+        <span className="sentio-shimmer mt-1 inline-block h-6 w-16 rounded" />
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={status}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className={`mt-0.5 inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeCls}`}
+            style={{ color }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: color, boxShadow: `0 0 5px ${color}` }}
+            />
+            {status}
+          </motion.span>
+        </AnimatePresence>
+      )}
+    </div>
   );
 }
 
-/* ─── Main NetworkCard ───────────────────────────────────── */
+// ─── Live Time Ago ────────────────────────────────────────────────────────────
+
+function LiveTimeAgo({ date }: { date: Date }) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      setSeconds(Math.floor((Date.now() - date.getTime()) / 1000));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [date]);
+
+  if (seconds < 60) return <span>{seconds}s ago</span>;
+  return <span>{Math.floor(seconds / 60)}m ago</span>;
+}
+
+// ─── Main NetworkCard ─────────────────────────────────────────────────────────
+
 export function NetworkCard() {
+  const [metrics, setMetrics] = useState<NetworkMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const m = await fetchMetrics();
+      setMetrics(m);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [tick, load]);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), REFRESH_INTERVAL * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const refresh = useCallback(() => setTick(t => t + 1), []);
+  const ledgerAnimated = useCountUp(metrics?.ledger ?? null);
+
   return (
     <motion.div
-      className="relative overflow-hidden rounded-2xl border border-foreground/8 bg-sentio-elevated/80 shadow-sentio-glow backdrop-blur-xl"
+      className="relative overflow-hidden rounded-2xl border border-foreground/8 bg-sentio-elevated/90 shadow-sentio-glow backdrop-blur-xl"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
     >
-      {/* Background SVG network */}
-      <div className="absolute inset-0 opacity-40">
-        <NetworkNodes />
-      </div>
+      {/* Decorative bg glow */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(263_70%_58%/0.07),transparent_60%)]" />
 
-      <div className="relative z-10 p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+      <div className="relative z-10 p-5">
+        {/* ── Header ── */}
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/30">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/25">
               <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden>
                 <path
                   d="M8 1.5l1.6 4.6H14l-3.8 2.8 1.5 4.6L8 10.8l-3.7 2.7 1.5-4.6L2 6.1h4.4z"
@@ -176,6 +269,7 @@ export function NetworkCard() {
               STELLAR NETWORK
             </span>
           </div>
+
           <div className="flex items-center gap-1.5">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sentio-success opacity-75" />
@@ -185,17 +279,66 @@ export function NetworkCard() {
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-3 gap-2">
-          <MetricTile label="Accounts" value={DEMO_METRICS.accounts} />
-          <MetricTile label="Assets" value={DEMO_METRICS.assets} />
-          <MetricTile label="24h Ops" value={DEMO_METRICS.ops24h} />
+        {/* ── Title ── */}
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-foreground">Live Network Snapshot</p>
+          <p className="text-[0.65rem] text-sentio-text-muted">
+            Ecosystem scale, activity, and health — before you explore.
+          </p>
         </div>
 
-        {/* Health status */}
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-sentio-success/15 bg-sentio-success/5 px-4 py-2.5">
-          <span className="text-xs font-medium text-sentio-success">Network Healthy</span>
-          <span className="text-[0.6rem] text-sentio-text-muted">Avg close: 5.2s</span>
+        {/* ── Error banner ── */}
+        {error && !loading && (
+          <div className="mb-3 rounded-xl border border-sentio-danger/20 bg-sentio-danger/8 px-3 py-2 text-xs text-sentio-danger">
+            Could not reach Horizon. Retrying…
+          </div>
+        )}
+
+        {/* ── 2×2 Stats ── */}
+        <div className="grid grid-cols-2 gap-2">
+          <StatTile
+            label="Current Ledger"
+            value={ledgerAnimated !== null ? fmtLarge(ledgerAnimated) : null}
+            loading={loading && metrics === null}
+          />
+          <StatTile
+            label="Transaction Success"
+            value={metrics ? `${metrics.txSuccessPct}%` : null}
+            sub="last 50 ledgers"
+            loading={loading && metrics === null}
+          />
+          <StatTile
+            label="24H Operations"
+            value={metrics ? fmtLarge(metrics.ops24h) : null}
+            sub="extrapolated from live data"
+            loading={loading && metrics === null}
+          />
+          <StatusTile status={metrics?.status ?? null} />
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[0.6rem] text-sentio-text-muted">
+              Horizon data
+              {metrics && (
+                <>
+                  {" · "}Updated <LiveTimeAgo date={metrics.updatedAt} />
+                  {loading && <span className="opacity-60"> (refreshing…)</span>}
+                </>
+              )}
+            </span>
+            {metrics && <CountdownRing key={tick} onRefresh={refresh} />}
+          </div>
+          <a
+            href="https://stellar.expert"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[0.6rem] text-sentio-text-muted transition hover:text-foreground"
+          >
+            Inspect in explorer
+            <ExternalLink className="h-2.5 w-2.5" />
+          </a>
         </div>
       </div>
     </motion.div>
