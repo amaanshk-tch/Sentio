@@ -8,7 +8,7 @@ export default function Index() {
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <AmbientLayer />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-[72rem] flex-col px-4 pb-20 pt-2 sm:px-8">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col px-4 pb-20 pt-2 sm:px-8">
         <LandingHero />
 
         <motion.footer
