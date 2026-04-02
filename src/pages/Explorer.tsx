@@ -116,20 +116,22 @@ function FactorRow({ factor }: { factor: RiskFactor }) {
     <div className="rounded-xl border border-foreground/6 bg-sentio-surface/40">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+        className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex flex-1 min-w-0 items-start gap-3 pt-0.5">
           <div
-            className="h-2 w-2 shrink-0 rounded-full"
+            className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
             style={{ background: color, boxShadow: `0 0 6px ${color}` }}
           />
-          <span className="text-sm font-medium text-foreground">{factor.label}</span>
+          <span className="text-sm font-medium leading-tight text-foreground" title={factor.label}>
+            {factor.label}
+          </span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs" style={{ color }}>
+        <div className="flex shrink-0 items-center gap-3 pt-0.5">
+          <span className="font-mono text-[0.7rem] font-bold" style={{ color }}>
             {factor.value ?? `${factor.score}/100`}
           </span>
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-foreground/8">
+          <div className="hidden h-1 w-12 overflow-hidden rounded-full bg-foreground/8 sm:block">
             <motion.div
               className="h-full rounded-full"
               style={{ background: color }}
@@ -139,7 +141,7 @@ function FactorRow({ factor }: { factor: RiskFactor }) {
             />
           </div>
           <ChevronRight
-            className="h-3.5 w-3.5 text-sentio-text-muted transition-transform"
+            className="mt-0.5 h-3.5 w-3.5 text-sentio-text-muted transition-transform"
             style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
           />
         </div>
@@ -552,7 +554,7 @@ export default function Explorer() {
           </span>
         </h1>
         <p className="text-body-lg mt-3 max-w-lg">
-          Enter a Stellar account address (G...) or asset code (e.g. USDC or USDC:GXXX...) to get a live risk analysis.
+          Enter a Stellar account address or asset code to get a live risk analysis.
         </p>
       </div>
 
@@ -669,7 +671,7 @@ export default function Explorer() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="grid gap-6 lg:grid-cols-[300px_1fr]"
+            className="grid gap-6 lg:grid-cols-[340px_1fr]"
           >
             <div className="space-y-4">
               <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
