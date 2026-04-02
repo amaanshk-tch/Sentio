@@ -18,12 +18,12 @@ export function BrandMark({ to, size = "md" }: BrandMarkProps) {
   const inner = (
     <>
       <div
-        className={`grid place-items-center bg-gradient-to-br from-cyan-500/25 to-teal-500/15 ring-1 ring-cyan-400/20 ${s.wrap}`}
+        className={`grid place-items-center bg-linear-to-br from-cyan-500/25 to-teal-500/15 ring-1 ring-cyan-400/20 ${s.wrap}`}
       >
         <Sparkles className={`text-cyan-200 ${s.icon}`} aria-hidden />
       </div>
       <span className={`font-semibold tracking-tight ${s.text}`}>
-        <span className="bg-gradient-to-r from-cyan-300 via-teal-200 to-emerald-300 bg-clip-text text-transparent">
+        <span className="bg-linear-to-r from-cyan-300 via-teal-200 to-emerald-300 bg-clip-text text-transparent">
           Sentio
         </span>
       </span>

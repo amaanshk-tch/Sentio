@@ -52,7 +52,7 @@ export function LandingHero() {
             animate="show"
             className="text-display mt-6 max-w-[20ch] text-balance"
           >
-            Know if it&apos;s <strong>safe</strong> before you{" "}
+            Check if it&apos;s <strong>safe</strong> before you{" "}
             <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-semibold text-transparent">
               click
             </span>
