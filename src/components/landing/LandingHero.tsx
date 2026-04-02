@@ -94,8 +94,6 @@ export function LandingHero() {
             className="mt-10 flex flex-wrap gap-x-8 gap-y-2 border-t border-foreground/6 pt-8 text-xs text-sentio-text-muted"
           >
             <li>Horizon-backed context</li>
-            <li>Composable 0–100 score</li>
-            <li>Built for operations</li>
           </motion.ul>
         </div>
 
