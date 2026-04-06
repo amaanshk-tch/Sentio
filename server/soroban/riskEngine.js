@@ -22,7 +22,6 @@ export function computeContractRisk(data) {
     factors.push({ label, impact: +impact, reason });
   }
 
-  // ── Contract age ─────────────────────────────────────────────────────────
   if (ageDays === 0) {
     penalize("Brand new contract", 30, "Deployed within the last 24 hours — extremely high risk window.");
     flags.push("brand_new");
@@ -34,7 +33,6 @@ export function computeContractRisk(data) {
     flags.push("new_contract");
   }
 
-  // ── Usage volume ──────────────────────────────────────────────────────────
   if (invocationCount === 0) {
     penalize("No recorded invocations", 20, "This contract has never been called in the scanned period. Unverified in practice.");
     flags.push("no_usage");
@@ -45,7 +43,6 @@ export function computeContractRisk(data) {
     bonus("High invocation count", 8, "Well-used contracts are generally more scrutinized and trusted.");
   }
 
-  // ── Deployer reputation ───────────────────────────────────────────────────
   if (!deployer?.deployerDomainVerified) {
     penalize("Unverified deployer domain", 15, "The account that deployed this contract has no verified stellar.toml domain.");
     flags.push("unverified_deployer");
@@ -55,7 +52,6 @@ export function computeContractRisk(data) {
     flags.push("new_deployer");
   }
 
-  // ── Event patterns ────────────────────────────────────────────────────────
   if (eventPatternFlags.includes("event_burst")) {
     penalize("Event burst detected", 10, "A large spike in contract events was detected — common in exploit or spam campaigns.");
     flags.push("event_burst");
@@ -65,7 +61,6 @@ export function computeContractRisk(data) {
     flags.push("admin_events");
   }
 
-  // ── Caller diversity ──────────────────────────────────────────────────────
   if (uniqueCallers === 0) {
     penalize("No distinct callers", 8, "No unique callers identified — the contract may not be publicly accessible.");
   } else if (uniqueCallers < 3) {
@@ -75,23 +70,18 @@ export function computeContractRisk(data) {
     bonus("High caller diversity", 5, "Many unique callers suggest organic, real-world usage.");
   }
 
-  // ── Dominant caller concentration ─────────────────────────────────────────
   if (dominantCallerRatio > 0.8 && invocationCount > 3) {
     penalize("Heavily concentrated usage", 8, "One account is responsible for most calls — may indicate bot activity.");
     flags.push("concentrated_usage");
   }
-
-  // ── Contract type context ─────────────────────────────────────────────────
   if (contractType === "Unknown") {
     penalize("Unknown contract type", 5, "Could not classify contract behavior from events. Treat as unverified.");
   } else {
     bonus(`Contract type identified: ${contractType}`, 3, "Contract behavior matches known patterns, aiding analysis.");
   }
 
-  // ── Clamp ─────────────────────────────────────────────────────────────────
   score = Math.min(100, Math.max(0, Math.round(score)));
 
-  // ── Trend ─────────────────────────────────────────────────────────────────
   const contractId = data.contractId;
   const history    = scoreHistory.get(contractId) ?? [];
   const prevScore  = history.length > 0 ? history[history.length - 1].score : null;
@@ -103,9 +93,8 @@ export function computeContractRisk(data) {
   const risk   = score > 70 ? "Low Risk"    : score >= 40 ? "Medium Risk" : "High Risk";
   const color  = score > 70 ? "emerald"     : score >= 40 ? "amber"       : "rose";
 
-  // Confidence: how many signals were data-backed
   const signals = [ageDays != null, invocationCount != null, uniqueCallers != null,
-                   deployer?.deployerDomainVerified !== undefined, eventCount > 0];
+                    deployer?.deployerDomainVerified !== undefined, eventCount > 0];
   const confidence = Math.round((signals.filter(Boolean).length / signals.length) * 100);
 
   return { score, risk, color, flags, factors, trend, history: newHistory, confidence };
