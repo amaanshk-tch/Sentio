@@ -1,4 +1,3 @@
-/* ─── TOML Parser ─────────────────────────────────────────────────────────── */
 function parseStellarToml(text) {
   const result = {};
   for (const raw of text.split("\n")) {
@@ -18,7 +17,6 @@ function parseStellarToml(text) {
   return result;
 }
 
-/* ─── TOML Verification ───────────────────────────────────────────────────── */
 export async function verifyHomeDomain(homeDomain, accountId) {
   if (!homeDomain) return { homeDomain: null, verified: false, tomlFields: {} };
   const domain = String(homeDomain).trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
@@ -45,7 +43,6 @@ export async function verifyHomeDomain(homeDomain, accountId) {
   }
 }
 
-/* ─── Transaction Pattern Analysis ───────────────────────────────────────── */
 export function analyzeTransactionPatterns(records) {
   if (!Array.isArray(records) || records.length < 2) return { pattern: "normal", flags: [], velocity: 0 };
 
@@ -85,7 +82,6 @@ export function analyzeTransactionPatterns(records) {
   return { pattern, flags, velocity };
 }
 
-/* ─── Trustline Quality ───────────────────────────────────────────────────── */
 const COMMON_LOOKALIKES = ["USDC", "USDT", "XLM", "BTC", "ETH"];
 
 export function analyzeTrustlines(balances) {
@@ -106,7 +102,6 @@ export function analyzeTrustlines(balances) {
   return { qualityScore, flags, nonNativeCount: nonNative.length };
 }
 
-/* ─── Confidence Score ────────────────────────────────────────────────────── */
 export function computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset }) {
   const signals = [ageDays != null, txRecentCount != null, domainVerified !== undefined, !isAsset || assetSupply != null];
   return Math.round((signals.filter(Boolean).length / signals.length) * 100);
@@ -116,7 +111,6 @@ function timeWeight(ageInDays) {
   return Math.exp(-(ageInDays ?? 0) / 30);
 }
 
-/* ─── Core Risk Scorer ────────────────────────────────────────────────────── */
 export function computeRisk({
   ageDays, txRecentCount, trustlinesCount, domainVerified, accountListed,
   flags, isAsset, assetSupply, txPattern, trustlineFlags, trustlineQuality,
@@ -138,7 +132,6 @@ export function computeRisk({
     score += pts;
   }
 
-  // ── Account age ────────────────────────────────────────────────────────────
   if (ageDays != null) {
     if (ageDays < 14) {
       penalize("New account (< 14 days)", 30, ageDays);
@@ -149,7 +142,6 @@ export function computeRisk({
     }
   }
 
-  // ── Recent activity ────────────────────────────────────────────────────────
   if (txRecentCount != null) {
     if (txRecentCount < 5) {
       penalize("Very low 30-day activity", 20);
@@ -159,13 +151,10 @@ export function computeRisk({
     }
   }
 
-  // ── Transaction velocity ───────────────────────────────────────────────────
   if (velocity > 50) {
     penalize("Very high transaction velocity (> 50 tx/24h)", 15, ageDays);
     riskFactors.highVelocity = true;
   }
-
-  // ── Domain verification ────────────────────────────────────────────────────
   if (!domainVerified) {
     penalize("No verified stellar.toml", 20);
     riskFactors.noDomain = true;
@@ -173,7 +162,6 @@ export function computeRisk({
     bonus("Account listed in TOML ACCOUNTS", 8);
   }
 
-  // ── Trustlines ─────────────────────────────────────────────────────────────
   if (trustlinesCount != null && trustlinesCount === 0 && !isAsset) {
     penalize("No trustlines established", 6);
   }
@@ -191,7 +179,6 @@ export function computeRisk({
     riskFactors.poorTrustlineQuality = true;
   }
 
-  // ── Behavioral patterns ────────────────────────────────────────────────────
   if (txPattern === "bot_spam") {
     penalize("Repeated identical activity (bot/spam)", 25, ageDays);
     riskFactors.suspiciousTxPattern = "bot_spam";
@@ -200,7 +187,6 @@ export function computeRisk({
     riskFactors.suspiciousTxPattern = "burst";
   }
 
-  // ── Account flags ──────────────────────────────────────────────────────────
   const flagList = Array.isArray(flags) ? flags : [];
   if (flagList.includes("auth_required")) {
     penalize("auth_required flag enabled", 6);
@@ -215,13 +201,11 @@ export function computeRisk({
     riskFactors.authRevocable = true;
   }
 
-  // ── Asset supply ───────────────────────────────────────────────────────────
   if (isAsset && typeof assetSupply === "number" && assetSupply > 600_000_000) {
     penalize("Very high asset supply", 10);
     riskFactors.highSupply = true;
   }
 
-  // ── Clamp ──────────────────────────────────────────────────────────────────
   score = Math.min(100, Math.max(0, score))
   let trend = "stable";
   if (prevScore !== null) {
@@ -248,7 +232,6 @@ export function computeRisk({
   };
 }
 
-/* ─── ELI5 Insight Builder ────────────────────────────────────────────────── */
 function buildInsight(score, riskFactors) {
   const parts = [];
   if (riskFactors.newAccount)     parts.push("This account was created very recently — scams often appear fresh.");

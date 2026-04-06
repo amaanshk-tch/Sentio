@@ -1,9 +1,4 @@
 import { useEffect, useRef } from "react";
-
-/**
- * Animated flowing SVG paths background — inspired by the "Background Paths"
- * reference. Creates organic, sweeping curves that slowly animate.
- */
 export function FlowingPaths() {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -30,7 +25,6 @@ export function FlowingPaths() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Generate curved paths
   const paths = Array.from({ length: 30 }, (_, i) => {
     const yBase = 5 + (i / 30) * 90;
     const amplitude = 15 + Math.sin(i * 0.7) * 12;

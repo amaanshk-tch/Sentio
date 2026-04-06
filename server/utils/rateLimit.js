@@ -1,8 +1,5 @@
 const rateWindows = new Map();
 
-/**
- * Simple in-memory rate limiter per IP address.
- */
 export function rateLimitMiddleware(maxPerMinute = 30) {
   return (req, res, next) => {
     const ip  = req.ip || req.connection?.remoteAddress || "unknown";

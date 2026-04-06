@@ -2,8 +2,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw, ExternalLink } from "lucide-react";
 
-// ─── Horizon data fetcher ─────────────────────────────────────────────────────
-
 const HORIZON = "https://horizon.stellar.org";
 
 interface NetworkMetrics {
@@ -59,18 +57,12 @@ async function fetchMetrics(): Promise<NetworkMetrics> {
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function fmtLarge(n: number) {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
   return n.toLocaleString();
 }
-
-
-
-// ─── Count-up ─────────────────────────────────────────────────────────────────
 
 function useCountUp(target: number | null, duration = 900) {
   const [val, setVal] = useState<number | null>(null);
@@ -95,7 +87,6 @@ function useCountUp(target: number | null, duration = 900) {
   return val;
 }
 
-// ─── Countdown ring refresh button ───────────────────────────────────────────
 
 const REFRESH_INTERVAL = 10;
 
@@ -113,8 +104,6 @@ function CountdownRing({ onRefresh }: { onRefresh: () => void }) {
     </button>
   );
 }
-
-// ─── Stat tile ────────────────────────────────────────────────────────────────
 
 function StatTile({
   label, value, sub, loading,
@@ -149,8 +138,6 @@ function StatTile({
     </div>
   );
 }
-
-// ─── Network status tile ──────────────────────────────────────────────────────
 
 function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
   const color =
@@ -191,8 +178,6 @@ function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
   );
 }
 
-// ─── Live Time Ago ────────────────────────────────────────────────────────────
-
 function LiveTimeAgo({ date }: { date: Date }) {
   const [seconds, setSeconds] = useState(0);
 
@@ -208,8 +193,6 @@ function LiveTimeAgo({ date }: { date: Date }) {
   if (seconds < 60) return <span>{seconds}s ago</span>;
   return <span>{Math.floor(seconds / 60)}m ago</span>;
 }
-
-// ─── Main NetworkCard ─────────────────────────────────────────────────────────
 
 export function NetworkCard() {
   const [metrics, setMetrics] = useState<NetworkMetrics | null>(null);
@@ -247,11 +230,9 @@ export function NetworkCard() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
     >
-      {/* Decorative bg glow */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(263_70%_58%/0.07),transparent_60%)]" />
 
       <div className="relative z-10 p-5">
-        {/* ── Header ── */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[0.6rem] font-semibold tracking-widest text-sentio-text-muted">
@@ -268,7 +249,6 @@ export function NetworkCard() {
           </div>
         </div>
 
-        {/* ── Title ── */}
         <div className="mb-4">
           <p className="text-sm font-semibold text-foreground">Live Network Snapshot</p>
           <p className="text-[0.65rem] text-sentio-text-muted">
@@ -276,14 +256,12 @@ export function NetworkCard() {
           </p>
         </div>
 
-        {/* ── Error banner ── */}
         {error && !loading && (
           <div className="mb-3 rounded-xl border border-sentio-danger/20 bg-sentio-danger/8 px-3 py-2 text-xs text-sentio-danger">
             Could not reach Horizon. Retrying…
           </div>
         )}
 
-        {/* ── 2×2 Stats ── */}
         <div className="grid grid-cols-2 gap-2">
           <StatTile
             label="Current Ledger"
@@ -305,7 +283,6 @@ export function NetworkCard() {
           <StatusTile status={metrics?.status ?? null} />
         </div>
 
-        {/* ── Footer ── */}
         <div className="mt-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[0.6rem] text-sentio-text-muted">

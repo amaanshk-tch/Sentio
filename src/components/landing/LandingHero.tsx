@@ -17,7 +17,6 @@ const fade: Variants = {
 export function LandingHero() {
   return (
     <>
-      {/* Navbar */}
       <motion.header
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -35,9 +34,7 @@ export function LandingHero() {
         </Link>
       </motion.header>
 
-      {/* Hero split layout */}
       <div className="grid flex-1 grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-8 lg:pt-4">
-        {/* Left: text content */}
         <div>
           <motion.div custom={0} variants={fade} initial="hidden" animate="show">
             <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
@@ -97,14 +94,12 @@ export function LandingHero() {
           </motion.ul>
         </div>
 
-        {/* Right: card — centered */}
         <motion.div
           className="relative flex flex-col items-center justify-center lg:items-end"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          {/* Network card */}
           <div className="w-full max-w-[400px] animate-float" style={{ animationDelay: "0s" }}>
             <NetworkCard />
           </div>

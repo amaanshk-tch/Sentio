@@ -4,7 +4,6 @@ import { FlowingPaths } from "./FlowingPaths";
 export function AmbientLayer() {
   return (
     <>
-      {/* Radial gradient blobs */}
       <div
         className="pointer-events-none fixed inset-0 opacity-80"
         style={{
@@ -13,13 +12,10 @@ export function AmbientLayer() {
         }}
       />
 
-      {/* Flowing path lines */}
       <FlowingPaths />
 
-      {/* Subtle grid */}
       <div className="sentio-grid-bg pointer-events-none fixed inset-0 opacity-[0.18]" />
 
-      {/* Floating orb */}
       <motion.div
         className="pointer-events-none absolute -right-24 top-1/4 h-[min(420px,50vh)] w-[min(420px,50vw)] max-w-none rounded-full blur-[100px]"
         style={{ background: "hsl(210 20% 15% / 0.08)" }}
@@ -27,7 +23,6 @@ export function AmbientLayer() {
         transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Bottom accent orb */}
       <motion.div
         className="pointer-events-none absolute -left-32 bottom-1/4 h-[300px] w-[300px] rounded-full blur-[120px]"
         style={{ background: "hsl(185 100% 50% / 0.05)" }}

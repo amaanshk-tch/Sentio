@@ -1,11 +1,8 @@
 import { HORIZON_URL, isAccount } from "../utils/stellarContext.js";
 import { runScan } from "../api/scan.js";
 
-const STREAM_TTL_MS = 5 * 60 * 1000; // 5 minutes live
+const STREAM_TTL_MS = 5 * 60 * 1000;
 
-/**
- * Initializes the WebSocket server bindings for live risk stream updates.
- */
 export function setupWebSocket(wss) {
   wss.on("connection", (ws) => {
     let horizonReader    = null;
@@ -48,10 +45,9 @@ export function setupWebSocket(wss) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          // Decode chunk incrementally
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
-          buffer = lines.pop() ?? ""; // incomplete line remains in buffer
+          buffer = lines.pop() ?? "";
 
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
@@ -62,10 +58,9 @@ export function setupWebSocket(wss) {
             try { tx = JSON.parse(payload); } catch { continue; }
             if (!tx?.id) continue;
 
-            resetKillTimer(); // refresh 5m limit
+            resetKillTimer();
             
             try {
-              // On new transaction, fire off a fast score recalculation
               const controller = new AbortController();
               const t = setTimeout(() => controller.abort(), 12_000);
               const updated = await runScan(accountId, { signal: controller.signal, prevScore: lastScore });
