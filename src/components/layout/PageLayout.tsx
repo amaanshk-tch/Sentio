@@ -17,10 +17,8 @@ export function PageLayout({
 
   return (
     <div className={`relative min-h-screen overflow-hidden bg-background text-foreground ${className}`}>
-      {/* Background patterns extraction */}
       <AmbientLayer />
 
-      {/* Content wrapper extraction */}
       <main
         className={`relative z-10 mx-auto px-4 sm:px-8 ${
           isCentered 
