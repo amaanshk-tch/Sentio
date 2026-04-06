@@ -15,10 +15,6 @@ import {
 } from "../riskEngine.js";
 import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
 
-/**
- * Executes a full scan for a Stellar account or asset.
- * heavily parallelizes all Horizon API calls to minimize latency.
- */
 export async function runScan(query, { signal, prevScore = null } = {}) {
   const asset   = parseAsset(query);
   const isAsset = Boolean(asset);
@@ -26,7 +22,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   let address   = query;
   let assetSupply = null;
 
-  // ── Parallelize Fetch Phase ───────────────────────────────────────────────
   
   let assetPromise = Promise.resolve(null);
   if (isAsset) {
@@ -34,18 +29,15 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     assetPromise = fetchJson(
       `${HORIZON_URL}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
       { signal }
-    ).catch(() => null); // Silent fallback on failure
+    ).catch(() => null);
   }
 
-  // Account details
   const accountPromise = fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
 
-  // Once account yields, immediately kick off domain verification while other tx queries run
   const domainPromise = accountPromise.then((acc) => 
     verifyHomeDomain(acc?.home_domain || null, accountId)
   ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
 
-  // Check Soroban RiskRegistry for existing on-chain reputation
   const onchainRiskPromise = getOnchainRisk(address);
 
   // Recent transactions (last 200)
@@ -66,7 +58,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     { signal }
   ).catch(() => null);
 
-  // Await the concurrent wave
   const [
     assetsResponse,
     account,
@@ -84,8 +75,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     opsPromise,
     onchainRiskPromise
   ]);
-
-  // ── Processing Phase ──────────────────────────────────────────────────────
 
   if (assetsResponse) {
     const record = assetsResponse?._embedded?.records?.[0];
@@ -131,8 +120,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
 
   const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
 
-  // ── Blockchain Trust Commit ───────────────────────────────────────────────
-  // If the score differs from what is registered on-chain, update it async
   if (!isAsset && riskResult.score !== onchainData?.score) {
     setOnchainRisk(address, {
       score: riskResult.score,
@@ -143,7 +130,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     );
   }
 
-  // ── Counterparties ─────────────────────────────────────────────────────────
   let counterparties = null;
   if (opsPayload) {
     const ops = Array.isArray(opsPayload?._embedded?.records) ? opsPayload._embedded.records : [];
@@ -157,18 +143,16 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     const unique = counterIds.size;
     let knownVerified = 0;
     
-    // We already do this concurrently for the top 5
     const cpIds = [...counterIds].slice(0, 5);
     await Promise.all(cpIds.map(async (id) => {
       try {
         const acc = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(id)}`, { signal });
         if (acc?.home_domain) knownVerified++;
-      } catch {} // Ignoring counterparty fetch failures
+      } catch {}
     }));
     counterparties = { total, unique, knownVerified };
   }
 
-  // ── Breakdown Rendering ───────────────────────────────────────────────────
   const breakdown = [
     { key: "age",        title: "Account Age",          value: ageDays == null ? "Unknown" : `${ageDays} days`,                              status: ageDays == null ? "Unknown" : ageDays < 14 ? "New" : ageDays < 90 ? "Growing" : "Established", tone: ageDays == null ? "slate" : ageDays < 14 ? "rose" : ageDays < 90 ? "amber" : "emerald", flag: ageDays != null && ageDays < 14 ? "new_account" : null },
     { key: "tx",         title: "Transactions (30d)",   value: txRecentCount?.toLocaleString() ?? "Unknown",                                  status: txRecentCount == null ? "Unknown" : txRecentCount < 5 ? "Very low" : txRecentCount < 25 ? "Low" : "Normal", tone: txRecentCount == null ? "slate" : txRecentCount < 5 ? "rose" : txRecentCount < 25 ? "amber" : "emerald", flag: txPattern !== "normal" ? txPattern : null },
@@ -189,9 +173,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   };
 }
 
-/**
- * Express handler for POST /api/scan (Accounts & Assets)
- */
 export async function scanHandler(req, res) {
   try {
     const query = normalizeQuery(req.body?.query ?? "");
@@ -208,7 +189,7 @@ export async function scanHandler(req, res) {
     if (cached) return res.json({ ...cached, cached: true });
 
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 14_000); // 14s timeout
+    const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
       const result = await runScan(query, { signal: controller.signal });
       cacheSet(cacheKey, result);

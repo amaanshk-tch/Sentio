@@ -4,9 +4,6 @@ import { buildInsights, buildSummary, buildRecommendation } from "../soroban/ins
 import { cacheGet, cacheSet } from "../utils/cache.js";
 import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
 
-/**
- * Express handler for POST /api/scan/contract (Soroban smart contracts)
- */
 export async function contractScanHandler(req, res) {
   try {
     const query = req.body?.contractId?.trim();
@@ -20,7 +17,7 @@ export async function contractScanHandler(req, res) {
     if (cached) return res.json({ ...cached, cached: true });
 
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 14_000); // 14s timeout
+    const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
       const onchainRiskPromise = getOnchainRisk(query);
       const data     = await analyzeContract(query, { signal: controller.signal });
