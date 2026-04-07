@@ -9,8 +9,8 @@ import {
   Account
 } from "@stellar/stellar-sdk";
 
-const RPC_URL = process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
-const HORIZON_URL = process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
+const RPC_URL = process.env.STELLAR_RPC_URL;
+const HORIZON_URL = process.env.STELLAR_HORIZON_URL;
 const NETWORK_PASSPHRASE = process.env.STELLAR_NETWORK_PASSPHRASE || Networks.TESTNET;
 const CONTRACT_ID = process.env.RISK_REGISTRY_CONTRACT_ID;
 const ADMIN_SECRET = process.env.SENTIO_ADMIN_SECRET;
@@ -105,5 +105,118 @@ export async function setOnchainRisk(address, payload) {
   } catch (err) {
     console.error("[Onchain] set_risk failed:", err.message);
     return { success: false, reason: err.message };
+  }
+}
+
+export async function getOnchainHistory(address) {
+  if (!CONTRACT_ID) return [];
+  
+  try {
+    const contract = new Contract(CONTRACT_ID);
+    const tx = new TransactionBuilder(new Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "0"), { 
+      fee: "100", 
+      networkPassphrase: NETWORK_PASSPHRASE 
+    })
+      .addOperation(contract.call("get_history", nativeToScVal(address, { type: 'address' })))
+      .setTimeout(30)
+      .build();
+
+    const sim = await rpcServer.simulateTransaction(tx);
+    
+    if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
+      if (!sim.result.retval) return [];
+      
+      const val = scValToNative(sim.result.retval);
+      if (Array.isArray(val)) {
+        return val.map(item => ({
+          score: Number(item.score),
+          confidence: Number(item.confidence),
+          category: item.category ? item.category.toString() : "",
+          last_updated: Number(item.last_updated) * 1000 
+        })).reverse();
+      }
+    }
+    return [];
+  } catch (err) {
+    console.warn("[Onchain] get_history failed:", err.message);
+    return [];
+  }
+}
+
+export async function flagOnchain(reporterSecret, address, reason, severity) {
+  if (!CONTRACT_ID) return { success: false, reason: "No contract configured" };
+
+  try {
+    const reporterKp = Keypair.fromSecret(reporterSecret);
+    const contract = new Contract(CONTRACT_ID);
+    
+    const sourceAccount = await loadAccount(reporterKp.publicKey());
+    
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: "1000",
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(contract.call(
+        "flag",
+        nativeToScVal(reporterKp.publicKey(), { type: 'address' }),
+        nativeToScVal(address, { type: 'address' }),
+        nativeToScVal(reason, { type: 'symbol' }),
+        nativeToScVal(severity, { type: 'u32' })
+      ))
+      .setTimeout(30)
+      .build();
+
+    const sim = await rpcServer.simulateTransaction(tx);
+    if (!rpc.Api.isSimulationSuccess(sim)) {
+      console.error("[Onchain] flag Simulation failed:", sim);
+      return { success: false, reason: "Simulation failed" };
+    }
+
+    const assembledTx = rpc.assembleTransaction(tx, NETWORK_PASSPHRASE, sim).build();
+    assembledTx.sign(reporterKp);
+
+    const response = await rpcServer.sendTransaction(assembledTx);
+    if (response.status === "PENDING" || response.status === "SUCCESS") {
+      return { success: true, hash: response.hash };
+    }
+    
+    return { success: false, reason: response.status };
+  } catch (err) {
+    console.error("[Onchain] flag failed:", err.message);
+    return { success: false, reason: err.message };
+  }
+}
+
+export async function getOnchainFlags(address) {
+  if (!CONTRACT_ID) return [];
+  
+  try {
+    const contract = new Contract(CONTRACT_ID);
+    const tx = new TransactionBuilder(new Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "0"), { 
+      fee: "100", 
+      networkPassphrase: NETWORK_PASSPHRASE 
+    })
+      .addOperation(contract.call("get_flags", nativeToScVal(address, { type: 'address' })))
+      .setTimeout(30)
+      .build();
+
+    const sim = await rpcServer.simulateTransaction(tx);
+    
+    if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
+      if (!sim.result.retval) return [];
+      const val = scValToNative(sim.result.retval);
+      if (Array.isArray(val)) {
+        return val.map(item => ({
+          reporter: item.reporter,
+          reason: item.reason ? item.reason.toString() : "",
+          severity: Number(item.severity),
+          timestamp: Number(item.timestamp) * 1000 
+        })).reverse();
+      }
+    }
+    return [];
+  } catch (err) {
+    console.warn("[Onchain] get_flags failed:", err.message);
+    return [];
   }
 }

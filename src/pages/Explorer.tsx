@@ -14,6 +14,22 @@ import {
 } from "@/lib/stellar";
 import { scoreAccount, scoreAsset, type RiskReport, type RiskFactor } from "@/lib/riskEngine";
 
+// ─── Onchain Types ─────────────────────────────────────────────────────────
+
+export interface OnchainRisk {
+  score: number;
+  confidence: number;
+  category: string;
+  last_updated: number;
+}
+
+export interface OnchainFlag {
+  reporter: string;
+  reason: string;
+  severity: number;
+  timestamp: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number, dec = 4) {
@@ -177,9 +193,11 @@ interface AccountPanelProps {
   account: HorizonAccount;
   risk: RiskReport;
   txns: HorizonTransaction[];
+  onchainHistory: OnchainRisk[];
+  onchainFlags: OnchainFlag[];
 }
 
-function AccountPanel({ account, risk, txns }: AccountPanelProps) {
+function AccountPanel({ account, risk, txns, onchainHistory, onchainFlags }: AccountPanelProps) {
   const xlmBal = account.balances.find(b => b.asset_type === "native");
   const tokens = account.balances.filter(b => b.asset_type !== "native" && b.asset_type !== "liquidity_pool_shares");
 
@@ -351,13 +369,64 @@ function AccountPanel({ account, risk, txns }: AccountPanelProps) {
           </div>
         </div>
       )}
+
+      {/* Onchain History & Flags */}
+      {onchainFlags.length > 0 && (
+        <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            On-chain Reports
+          </h3>
+          <div className="space-y-2">
+            {onchainFlags.map((flag, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-sentio-warning/20 bg-background/50 px-4 py-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Reason: {flag.reason}</p>
+                  <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
+                    Reporter: {shortAddress(flag.reporter)} · {timeAgo(new Date(flag.timestamp).toISOString())}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.6rem] font-bold text-sentio-warning">
+                    Severity: {flag.severity}/100
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {onchainHistory.length > 0 && (
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
+            On-chain Risk History
+          </h3>
+          <div className="space-y-2">
+            {onchainHistory.map((hist, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
+                 <div>
+                   <p className="text-xs font-medium capitalize">Category: {hist.category}</p>
+                   <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
+                     {timeAgo(new Date(hist.last_updated).toISOString())}
+                   </p>
+                 </div>
+                 <div className="text-right">
+                   <p className="text-sm font-bold opacity-90">{hist.score}/100</p>
+                   <p className="text-[0.6rem] text-sentio-text-muted">Conf: {hist.confidence}%</p>
+                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Asset Result Panel ───────────────────────────────────────────────────────
 
-function AssetPanel({ asset }: { asset: HorizonAsset; risk: RiskReport }) {
+function AssetPanel({ asset, onchainHistory, onchainFlags }: { asset: HorizonAsset; risk: RiskReport; onchainHistory: OnchainRisk[]; onchainFlags: OnchainFlag[] }) {
   const totalSupply = parseFloat(asset.balances?.authorized ?? "0")
     + parseFloat(asset.balances?.authorized_to_maintain_liabilities ?? "0");
 
@@ -467,6 +536,57 @@ function AssetPanel({ asset }: { asset: HorizonAsset; risk: RiskReport }) {
           </p>
         )}
       </div>
+
+      {/* Onchain History & Flags */}
+      {onchainFlags.length > 0 && (
+        <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            On-chain Reports
+          </h3>
+          <div className="space-y-2">
+            {onchainFlags.map((flag, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-sentio-warning/20 bg-background/50 px-4 py-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Reason: {flag.reason}</p>
+                  <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
+                    Reporter: {shortAddress(flag.reporter)} · {timeAgo(new Date(flag.timestamp).toISOString())}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.6rem] font-bold text-sentio-warning">
+                    Severity: {flag.severity}/100
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {onchainHistory.length > 0 && (
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
+            On-chain Risk History
+          </h3>
+          <div className="space-y-2">
+            {onchainHistory.map((hist, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
+                 <div>
+                   <p className="text-xs font-medium capitalize">Category: {hist.category}</p>
+                   <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
+                     {timeAgo(new Date(hist.last_updated).toISOString())}
+                   </p>
+                 </div>
+                 <div className="text-right">
+                   <p className="text-sm font-bold opacity-90">{hist.score}/100</p>
+                   <p className="text-[0.6rem] text-sentio-text-muted">Conf: {hist.confidence}%</p>
+                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -484,6 +604,8 @@ type SearchState =
       asset?: HorizonAsset;
       risk: RiskReport;
       txns: HorizonTransaction[];
+      onchainHistory: OnchainRisk[];
+      onchainFlags: OnchainFlag[];
     };
 
 export default function Explorer() {
@@ -510,7 +632,25 @@ export default function Explorer() {
         throw new Error("No results found.");
       }
 
-      setState({ status: "done", mode, account, asset, risk, txns });
+      const addressToFetch = mode === "account" && account ? account.account_id : (asset ? `${asset.asset_code}:${asset.asset_issuer}` : "");
+      
+      let onchainHistory: OnchainRisk[] = [];
+      let onchainFlags: OnchainFlag[] = [];
+      
+      if (addressToFetch) {
+        try {
+           const [histRes, flagsRes] = await Promise.all([
+             fetch(`/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
+             fetch(`/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] })
+           ]);
+           onchainHistory = histRes.history || [];
+           onchainFlags = flagsRes.flags || [];
+        } catch (e) {
+           console.warn("Failed to fetch onchain data");
+        }
+      }
+
+      setState({ status: "done", mode, account, asset, risk, txns, onchainHistory, onchainFlags });
     } catch (err) {
       setState({
         status: "error",
@@ -724,10 +864,17 @@ export default function Explorer() {
                   account={state.account}
                   risk={state.risk}
                   txns={state.txns}
+                  onchainHistory={state.onchainHistory}
+                  onchainFlags={state.onchainFlags}
                 />
               )}
               {state.mode === "asset" && state.asset && (
-                <AssetPanel asset={state.asset} risk={state.risk} />
+                <AssetPanel 
+                  asset={state.asset} 
+                  risk={state.risk}
+                  onchainHistory={state.onchainHistory}
+                  onchainFlags={state.onchainFlags}
+                />
               )}
             </div>
           </motion.div>

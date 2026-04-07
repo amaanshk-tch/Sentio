@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "http";
 import express from "express";
 import cors from "cors";
@@ -6,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { rateLimitMiddleware } from "./utils/rateLimit.js";
 import { scanHandler } from "./api/scan.js";
 import { contractScanHandler } from "./api/contract.js";
+import { historyHandler, flagsHandler, reportHandler, setRiskHandler } from "./api/registryApi.js";
 import { setupWebSocket } from "./ws/stream.js";
 
 const app    = express();
@@ -21,6 +23,11 @@ setupWebSocket(wss);
 /* ─── API Routes ─────────────────────────────────────────────────────────── */
 app.post("/api/scan", rateLimitMiddleware(30), scanHandler);
 app.post("/api/scan/contract", rateLimitMiddleware(30), contractScanHandler);
+
+app.get("/api/registry/history/:address", historyHandler);
+app.get("/api/registry/flags/:address", flagsHandler);
+app.post("/api/registry/report", reportHandler);
+app.post("/api/registry/set-risk", setRiskHandler);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 

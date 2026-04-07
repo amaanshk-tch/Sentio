@@ -1,7 +1,7 @@
 
 import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
 
-const HORIZON_URL = process.env.STELLAR_HORIZON_URL || "https://horizon.stellar.org";
+const HORIZON_URL = process.env.STELLAR_HORIZON_URL;
 
 async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });

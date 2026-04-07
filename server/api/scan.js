@@ -13,7 +13,7 @@ import {
   computeConfidence,
   computeRisk,
 } from "../riskEngine.js";
-import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
+import { getOnchainRisk, setOnchainRisk, getOnchainHistory, getOnchainFlags } from "../soroban/registry.js";
 
 export async function runScan(query, { signal, prevScore = null } = {}) {
   const asset   = parseAsset(query);
@@ -39,6 +39,8 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
 
   const onchainRiskPromise = getOnchainRisk(address);
+  const onchainHistoryPromise = getOnchainHistory(address);
+  const onchainFlagsPromise = getOnchainFlags(address);
 
   // Recent transactions (last 200)
   const txRecentPromise = fetchJson(
@@ -65,7 +67,9 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     txRecent,
     txOldest,
     opsPayload,
-    onchainData
+    onchainData,
+    onchainHistory,
+    onchainFlags
   ] = await Promise.all([
     assetPromise,
     accountPromise,
@@ -73,7 +77,9 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     txRecentPromise,
     txOldestPromise,
     opsPromise,
-    onchainRiskPromise
+    onchainRiskPromise,
+    onchainHistoryPromise,
+    onchainFlagsPromise
   ]);
 
   if (assetsResponse) {
@@ -169,6 +175,8 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     breakdown,
     counterparties,
     onchainRiskData: onchainData,
+    onchainHistory: onchainHistory,
+    onchainFlags: onchainFlags,
     raw: { horizon: HORIZON_URL, accountId },
   };
 }

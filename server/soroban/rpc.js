@@ -1,5 +1,5 @@
 
-const RPC_URL = process.env.STELLAR_RPC_URL || "https://mainnet.stellar.validationcloud.io/v1/XCf7xhCOYnDkWBbLKPiPfg==";
+const RPC_URL = process.env.STELLAR_RPC_MAINNET_URL;
 
 let _reqId = 0;
 function nextId() { return ++_reqId; }

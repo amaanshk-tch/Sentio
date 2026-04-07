@@ -1,4 +1,4 @@
-export const HORIZON_URL = process.env.STELLAR_HORIZON_URL || "https://horizon.stellar.org";
+export const HORIZON_URL = process.env.STELLAR_HORIZON_URL;
 
 export async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });

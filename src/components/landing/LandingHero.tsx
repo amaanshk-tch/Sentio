@@ -24,14 +24,22 @@ export function LandingHero() {
         className="flex items-center justify-between gap-4 py-5"
       >
         <BrandMark to="/" size="lg" />
-        <Link
-          to="/explorer"
-          className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition-all hover:border-foreground/20 hover:bg-sentio-surface-hover hover:shadow-sentio-md"
-        >
-          <span className="hidden sm:inline">Open explorer</span>
-          <span className="sm:hidden">Explore</span>
-          <Compass className="h-4 w-4 opacity-90" aria-hidden />
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/admin"
+            className="hidden sm:inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-sentio-text-secondary transition-all hover:text-foreground"
+          >
+            Admin Dashboard
+          </Link>
+          <Link
+            to="/explorer"
+            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition-all hover:border-foreground/20 hover:bg-sentio-surface-hover hover:shadow-sentio-md"
+          >
+            <span className="hidden sm:inline">Open explorer</span>
+            <span className="sm:hidden">Explore</span>
+            <Compass className="h-4 w-4 opacity-90" aria-hidden />
+          </Link>
+        </div>
       </motion.header>
 
       <div className="grid flex-1 grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-8 lg:pt-4">
