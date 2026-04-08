@@ -57,7 +57,7 @@ export function LandingHero() {
             animate="show"
             className="text-display mt-6 max-w-[20ch] text-balance"
           >
-            Check if it&apos;s <strong>safe</strong> before you{" "}
+            Check if it's <strong>safe</strong> before you{" "}
             <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-semibold text-transparent">
               click
             </span>
@@ -71,10 +71,10 @@ export function LandingHero() {
             animate="show"
             className="text-body-lg mt-5 max-w-lg"
           >
-            You receive a token. Looks legit. It isn&apos;t.
+            You receive a token. Looks legit. It isn't.
             <br />
             <span className="text-sentio-text-muted">
-              Sentio intercepts and analyzes the risk before it&apos;s too late.
+              Sentio intercepts and analyzes the risk before it's too late.
             </span>
           </motion.p>
 
