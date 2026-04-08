@@ -408,7 +408,7 @@ function AccountPanel({ account, txns, onchainHistory, onchainFlags }: AccountPa
             <div className="space-y-3 overflow-y-auto pr-1">
               {txns.map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-3">
-                  <div className="overflow-hidden">
+                   <div className="overflow-hidden">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`h-2 w-2 rounded-full ${tx.successful ? "bg-sentio-success" : "bg-sentio-danger"}`} />
                       <p className="font-mono text-sm text-foreground truncate">{shortAddress(tx.id)}</p>
