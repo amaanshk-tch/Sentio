@@ -67,7 +67,7 @@ export function scoreAccount(account: HorizonAccount): RiskReport {
   const accountDate = ledgerToDate(account.last_modified_ledger);
   const ageMs = now - accountDate.getTime();
   const ageDays = ageMs / 86400000;
-  let ageScore = 0;
+  let ageScore;
   if (ageDays < 7) ageScore = 85;
   else if (ageDays < 30) ageScore = 60;
   else if (ageDays < 90) ageScore = 35;
@@ -130,7 +130,7 @@ export function scoreAccount(account: HorizonAccount): RiskReport {
   const xlmAmount = parseFloat(xlmBalance?.balance ?? "0");
   const minReserve = (2 + account.subentry_count) * 0.5;
   const bufferRatio = xlmAmount / minReserve;
-  let balanceScore = 0;
+  let balanceScore;
   if (xlmAmount < minReserve) balanceScore = 80;
   else if (bufferRatio < 1.5) balanceScore = 40;
   else if (bufferRatio < 5) balanceScore = 15;
@@ -151,7 +151,7 @@ export function scoreAccount(account: HorizonAccount): RiskReport {
   // 5. Trustlines count (large number = more exposure)
   const trustlines = account.balances.filter(b => b.asset_type !== "native");
   const tCount = trustlines.length;
-  let trustScore = 0;
+  let trustScore;
   if (tCount > 20) trustScore = 65;
   else if (tCount > 10) trustScore = 35;
   else if (tCount > 5) trustScore = 15;
@@ -268,7 +268,7 @@ export function scoreAsset(asset: HorizonAsset): RiskReport {
 
   // 2. Holder count
   const authorized = asset.accounts?.authorized ?? 0;
-  let holderScore = 0;
+  let holderScore;
   if (authorized === 0) holderScore = 90;
   else if (authorized < 10) holderScore = 70;
   else if (authorized < 100) holderScore = 40;

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, ArrowLeft, Shield, AlertTriangle, Clock, Globe,
   Layers, Key, Coins, Users, TrendingUp, ExternalLink,
-  ChevronRight, Copy, Check, RefreshCw, Info,
+  Copy, Check, RefreshCw, AlertCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "@/components/landing/BrandMark";
@@ -12,7 +12,6 @@ import {
   searchStellar, fetchAccountTransactions,
   type HorizonAccount, type HorizonAsset, type HorizonTransaction,
 } from "@/lib/stellar";
-import { scoreAccount, scoreAsset, type RiskReport, type RiskFactor } from "@/lib/riskEngine";
 
 // ─── Onchain Types ─────────────────────────────────────────────────────────
 
@@ -74,390 +73,357 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ─── Risk Score Ring ──────────────────────────────────────────────────────────
-
-function RiskRing({ score, color, label }: { score: number; color: string; label: string }) {
-  const r = 54;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (score / 100) * circ;
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: 140, height: 140 }}>
-      <svg width={140} height={140} viewBox="0 0 140 140" className="-rotate-90">
-        <circle cx={70} cy={70} r={r} fill="none" stroke="hsl(0 0% 100% / 0.05)" strokeWidth={10} />
-        <motion.circle
-          cx={70} cy={70} r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={10}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-          style={{ filter: `drop-shadow(0 0 6px ${color})` }}
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <motion.span
-          className="font-mono text-3xl font-bold"
-          style={{ color }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-        >
-          {score}
-        </motion.span>
-        <span className="text-[0.6rem] font-semibold uppercase tracking-widest" style={{ color }}>
-          {label}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Factor Row ───────────────────────────────────────────────────────────────
-
-function FactorRow({ factor }: { factor: RiskFactor }) {
-  const [open, setOpen] = useState(false);
-  const severityColor: Record<string, string> = {
-    low: "hsl(152 100% 45%)",
-    medium: "hsl(43 96% 56%)",
-    high: "hsl(25 95% 55%)",
-    critical: "hsl(348 100% 58%)",
-  };
-  const color = severityColor[factor.severity];
-
-  return (
-    <div className="rounded-xl border border-foreground/6 bg-sentio-surface/40">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"
-      >
-        <div className="flex flex-1 min-w-0 items-start gap-3 pt-0.5">
-          <div
-            className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-            style={{ background: color, boxShadow: `0 0 6px ${color}` }}
-          />
-          <span className="text-sm font-medium leading-tight text-foreground" title={factor.label}>
-            {factor.label}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-3 pt-0.5">
-          <span className="font-mono text-[0.7rem] font-bold" style={{ color }}>
-            {factor.value ?? `${factor.score}/100`}
-          </span>
-          <div className="hidden h-1 w-12 overflow-hidden rounded-full bg-foreground/8 sm:block">
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: color }}
-              initial={{ width: 0 }}
-              animate={{ width: `${factor.score}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            />
-          </div>
-          <ChevronRight
-            className="mt-0.5 h-3.5 w-3.5 text-sentio-text-muted transition-transform"
-            style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
-          />
-        </div>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <p className="border-t border-foreground/6 px-4 py-3 text-xs text-sentio-text-muted">
-              {factor.description}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 // ─── Skeleton loader ─────────────────────────────────────────────────────────
 
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`sentio-shimmer rounded-lg ${className}`} />;
 }
 
+// ─── 24h Flag Banner Component ────────────────────────────────────────────────
+function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
+  // Filter for flags in the last 24 hours
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const recentFlags = flags.filter(f => (now - f.timestamp) <= 24 * 60 * 60 * 1000);
+
+  if (recentFlags.length === 0) return null;
+
+  const maxSeverity = Math.max(...recentFlags.map(f => f.severity));
+  const latestReason = recentFlags[0]?.reason;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-6 flex items-start gap-4 rounded-2xl border border-sentio-danger/30 bg-sentio-danger/10 p-5 shadow-[0_0_20px_rgba(225,29,72,0.1)] relative overflow-hidden"
+    >
+      <div className="absolute top-0 right-0 p-4 opacity-10">
+        <AlertTriangle className="h-24 w-24 text-sentio-danger" />
+      </div>
+      <div className="flex shrink-0 h-10 w-10 items-center justify-center rounded-full bg-sentio-danger/20">
+        <AlertCircle className="h-5 w-5 text-sentio-danger animate-pulse" />
+      </div>
+      <div className="z-10">
+        <h3 className="text-sm font-bold text-sentio-danger uppercase tracking-wider flex items-center gap-2">
+          Flagged in the last 24 hours
+        </h3>
+        <p className="mt-1 text-sm text-sentio-text-secondary">
+          This address has received <strong className="text-foreground">{recentFlags.length} active warning(s)</strong>.
+          The latest reported reason is <span className="text-foreground font-medium">"{latestReason}"</span>.
+        </p>
+        <div className="mt-3 flex gap-3">
+          <span className="inline-flex rounded-lg bg-sentio-danger/20 px-2.5 py-1 text-xs font-bold text-sentio-danger">
+            Max Severity: {maxSeverity}/100
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Account Result Panel ─────────────────────────────────────────────────────
 
 interface AccountPanelProps {
   account: HorizonAccount;
-  risk: RiskReport;
   txns: HorizonTransaction[];
   onchainHistory: OnchainRisk[];
   onchainFlags: OnchainFlag[];
 }
 
-function AccountPanel({ account, risk, txns, onchainHistory, onchainFlags }: AccountPanelProps) {
+function AccountPanel({ account, txns, onchainHistory, onchainFlags }: AccountPanelProps) {
   const xlmBal = account.balances.find(b => b.asset_type === "native");
   const tokens = account.balances.filter(b => b.asset_type !== "native" && b.asset_type !== "liquidity_pool_shares");
 
   return (
     <div className="space-y-4">
+      <FlagBanner flags={onchainFlags} />
+      
       {/* Identity header */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
+      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-xs text-sentio-text-muted">
-                {shortAddress(account.account_id)}
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="inline-flex rounded-full bg-primary/20 text-primary px-2.5 py-0.5 text-xs font-semibold tracking-wide uppercase">
+                Stellar Account
               </span>
-              <CopyButton text={account.account_id} />
-              <a
-                href={`https://stellar.expert/explorer/public/account/${account.account_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1 text-sentio-text-muted hover:text-foreground"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <h2 className="font-mono text-xl md:text-3xl font-semibold break-all text-white">
+                {account.account_id}
+              </h2>
+              <div className="flex shrink-0">
+                <CopyButton text={account.account_id} />
+                <a
+                  href={`https://stellar.expert/explorer/public/account/${account.account_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 flex items-center justify-center p-1.5 text-sentio-text-muted hover:text-foreground transition-colors"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
             </div>
             {account.home_domain && (
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-sentio-text-muted">
-                <Globe className="h-3 w-3" />
-                <span>{account.home_domain}</span>
+              <div className="mt-3 flex items-center gap-2 text-sm text-primary">
+                <Globe className="h-4 w-4" />
+                <a href={`https://${account.home_domain}`} target="_blank" rel="noopener noreferrer" className="hover:underline font-medium">
+                  {account.home_domain}
+                </a>
               </div>
             )}
-          </div>
-          <div className="text-right text-xs text-sentio-text-muted">
-            <div>Subentries: <span className="text-foreground">{account.subentry_count}</span></div>
-            <div>Sponsoring: <span className="text-foreground">{account.num_sponsoring}</span></div>
-            <div>Sponsored: <span className="text-foreground">{account.num_sponsored}</span></div>
           </div>
         </div>
 
         {/* Quick stats */}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
             { icon: Coins, label: "XLM Balance", value: `${parseFloat(xlmBal?.balance ?? "0").toFixed(4)}` },
             { icon: Layers, label: "Tokens", value: `${tokens.length}` },
             { icon: Key, label: "Signers", value: `${account.signers.length}` },
-            { icon: Clock, label: "Account Age", value: risk.accountAgeLabel ?? "—" },
+            { icon: Users, label: "Subentries", value: `${account.subentry_count}` },
+            { icon: TrendingUp, label: "Sponsoring", value: `${account.num_sponsoring}` },
+            { icon: Users, label: "Sponsored", value: `${account.num_sponsored}` },
           ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-3">
-              <div className="flex items-center gap-1.5">
-                <Icon className="h-3.5 w-3.5 text-sentio-text-muted" />
-                <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">{label}</span>
+            <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-4">
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-sentio-text-muted" />
+                <span className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted">{label}</span>
               </div>
-              <p className="mt-1.5 font-mono text-base font-semibold text-foreground">{value}</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Flags */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">Account Flags</h3>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(account.flags).map(([k, v]) => (
-            <span
-              key={k}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                v
-                  ? "border border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger"
-                  : "border border-foreground/6 bg-sentio-surface/50 text-sentio-text-muted"
-              }`}
-            >
-              {k.replace(/_/g, " ")}
-              {v ? " ✓" : " ✗"}
-            </span>
-          ))}
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Flags */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
+            <Shield className="h-4 w-4" /> Account Protocol Flags
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(account.flags).map(([k, v]) => (
+              <span
+                key={k}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  v
+                    ? "border border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger"
+                    : "border border-foreground/6 bg-sentio-surface/50 text-sentio-text-muted"
+                }`}
+              >
+                {k.replace(/_/g, " ")}
+                {v ? " ✓" : " ✗"}
+              </span>
+            ))}
+          </div>
+          {Object.values(account.flags).every(v => !v) && (
+            <p className="text-sm mt-2 text-sentio-text-muted">This account has no elevated protocol flags enabled.</p>
+          )}
+        </div>
+
+        {/* Signers */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
+            <Key className="h-4 w-4" /> Signers & Thresholds
+          </h3>
+          <div className="flex gap-4 mb-4 pb-4 border-b border-white/5 text-sm">
+            <div className="flex column flex-col"><span className="text-sentio-text-muted text-xs uppercase">Low</span> <span className="font-mono font-bold mt-1 text-white">{account.thresholds.low_threshold}</span></div>
+            <div className="flex column flex-col"><span className="text-sentio-text-muted text-xs uppercase">Medium</span> <span className="font-mono font-bold mt-1 text-white">{account.thresholds.med_threshold}</span></div>
+            <div className="flex column flex-col"><span className="text-sentio-text-muted text-xs uppercase">High</span> <span className="font-mono font-bold mt-1 text-white">{account.thresholds.high_threshold}</span></div>
+          </div>
+          <div className="space-y-2 overflow-y-auto max-h-[200px] pr-1">
+            {account.signers.map((s, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-3">
+                <div className="overflow-hidden">
+                  <p className="font-mono text-sm text-foreground truncate">{s.key}</p>
+                  <p className="text-[0.7rem] uppercase tracking-wider font-semibold text-sentio-text-muted mt-1">{s.type}</p>
+                </div>
+                <span className="shrink-0 ml-3 rounded-lg border border-primary/20 bg-primary/10 text-primary px-3 py-1 text-sm font-bold">
+                  W: {s.weight}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Balances */}
-      {tokens.length > 0 && (
-        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
-            Trustlines ({tokens.length})
-          </h3>
-          <div className="space-y-2">
-            {tokens.slice(0, 12).map((b, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                    {(b.asset_code ?? "?").slice(0, 2)}
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Balances */}
+        {tokens.length > 0 && (
+          <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[400px] flex flex-col">
+            <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
+              <Layers className="h-4 w-4" /> Trustlines ({tokens.length})
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {tokens.map((b, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-3">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="flex shrink-0 h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+                      {(b.asset_code ?? "?").slice(0, 2)}
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-base font-bold flex items-center gap-2">
+                        {b.asset_code ?? "Unknown"} 
+                        {b.is_authorized === false && (
+                         <span className="text-[0.6rem] uppercase tracking-wider bg-sentio-warning/20 text-sentio-warning px-1.5 py-0.5 rounded">Unauthorized</span>
+                        )}
+                      </p>
+                      <p className="text-xs font-mono text-sentio-text-muted mt-0.5 truncate pr-2">
+                        {b.asset_issuer}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">{b.asset_code ?? "Unknown"}</p>
-                    <p className="text-[0.6rem] text-sentio-text-muted">
-                      {b.asset_issuer ? shortAddress(b.asset_issuer) : ""}
+                  <div className="text-right shrink-0">
+                    <p className="font-mono text-base font-semibold">{parseFloat(b.balance).toFixed(4)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Transactions */}
+        {txns.length > 0 && (
+          <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[400px] flex flex-col">
+            <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
+              <Clock className="h-4 w-4" /> Recent Transactions
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {txns.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-3">
+                  <div className="overflow-hidden">
+                    <div className="flex items-center gap-2 mb-1">
+                       <span className={`h-2 w-2 rounded-full ${tx.successful ? "bg-sentio-success" : "bg-sentio-danger"}`}></span>
+                       <p className="font-mono text-sm text-foreground truncate">{tx.id}</p>
+                    </div>
+                    <p className="text-xs text-sentio-text-muted font-medium">
+                      {tx.operation_count} op{tx.operation_count !== 1 ? "s" : ""} · {timeAgo(tx.created_at)}
                     </p>
                   </div>
+                  <div className="flex justify-end shrink-0 ml-2">
+                    <a
+                      href={`https://stellar.expert/explorer/public/tx/${tx.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white/5 text-sentio-text-muted hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-mono text-sm">{parseFloat(b.balance).toFixed(4)}</p>
-                  {b.is_authorized === false && (
-                    <p className="text-[0.6rem] text-sentio-warning">Unauthorized</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {tokens.length > 12 && (
-              <p className="pt-1 text-center text-xs text-sentio-text-muted">
-                +{tokens.length - 12} more trustlines
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Signers */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
-          Signers ({account.signers.length})
-        </h3>
-        <div className="space-y-2">
-          {account.signers.map((s, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-              <div>
-                <p className="font-mono text-xs text-foreground">{shortAddress(s.key)}</p>
-                <p className="text-[0.6rem] text-sentio-text-muted">{s.type}</p>
-              </div>
-              <span className="rounded-lg border border-foreground/10 bg-sentio-surface px-2.5 py-1 text-xs font-medium">
-                Weight: {s.weight}
-              </span>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="mt-2 flex gap-4 text-xs text-sentio-text-muted">
-          <span>Low: {account.thresholds.low_threshold}</span>
-          <span>Med: {account.thresholds.med_threshold}</span>
-          <span>High: {account.thresholds.high_threshold}</span>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Recent Transactions */}
-      {txns.length > 0 && (
-        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
-            Recent Transactions
-          </h3>
-          <div className="space-y-2">
-            {txns.slice(0, 8).map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-                <div>
-                  <p className="font-mono text-xs text-foreground">{shortAddress(tx.id)}</p>
-                  <p className="text-[0.6rem] text-sentio-text-muted">
-                    {tx.operation_count} op{tx.operation_count !== 1 ? "s" : ""} · {timeAgo(tx.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[0.6rem] font-semibold ${tx.successful ? "text-sentio-success" : "text-sentio-danger"}`}>
-                    {tx.successful ? "SUCCESS" : "FAILED"}
-                  </span>
-                  <a
-                    href={`https://stellar.expert/explorer/public/tx/${tx.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sentio-text-muted hover:text-foreground"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Onchain History & Flags */}
-      {onchainFlags.length > 0 && (
-        <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            On-chain Reports
-          </h3>
-          <div className="space-y-2">
-            {onchainFlags.map((flag, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-sentio-warning/20 bg-background/50 px-4 py-2.5">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Reason: {flag.reason}</p>
-                  <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
-                    Reporter: {shortAddress(flag.reporter)} · {timeAgo(new Date(flag.timestamp).toISOString())}
-                  </p>
+      <div className="grid lg:grid-cols-2 gap-4">
+        {onchainFlags.length > 0 && (
+          <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-6 flex flex-col max-h-[350px]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              On-chain Incident Reports
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {onchainFlags.map((flag, i) => (
+                <div key={i} className="flex flex-col rounded-xl border border-sentio-warning/20 bg-background/60 p-4">
+                  <div className="flex justify-between items-start mb-2">
+                     <p className="text-sm font-bold text-white">Reason: <span className="font-medium text-sentio-warning">"{flag.reason}"</span></p>
+                     <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.65rem] uppercase tracking-wider font-bold text-sentio-warning">
+                      Severity: {flag.severity}/100
+                    </span>
+                  </div>
+                  <div className="text-xs flex justify-between text-sentio-text-muted mt-2 border-t border-white/5 pt-2">
+                    <span className="font-mono">Reporter: {shortAddress(flag.reporter)}</span>
+                    <span>{timeAgo(new Date(flag.timestamp).toISOString())}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.6rem] font-bold text-sentio-warning">
-                    Severity: {flag.severity}/100
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {onchainHistory.length > 0 && (
-        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
-            On-chain Risk History
-          </h3>
-          <div className="space-y-2">
-            {onchainHistory.map((hist, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-                 <div>
-                   <p className="text-xs font-medium capitalize">Category: {hist.category}</p>
-                   <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
-                     {timeAgo(new Date(hist.last_updated).toISOString())}
-                   </p>
-                 </div>
-                 <div className="text-right">
-                   <p className="text-sm font-bold opacity-90">{hist.score}/100</p>
-                   <p className="text-[0.6rem] text-sentio-text-muted">Conf: {hist.confidence}%</p>
-                 </div>
-              </div>
-            ))}
+        {onchainHistory.length > 0 && (
+          <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col max-h-[350px]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              On-chain Risk Assessment History
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {onchainHistory.map((hist, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/40 px-4 py-3">
+                   <div>
+                     <p className="text-sm font-semibold text-white capitalize">{hist.category}</p>
+                     <p className="text-xs text-sentio-text-muted mt-1">
+                       {timeAgo(new Date(hist.last_updated).toISOString())}
+                     </p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-lg font-bold text-white tabular-nums">{hist.score}<span className="text-sm text-sentio-text-muted font-medium">/100</span></p>
+                     <p className="text-[0.65rem] uppercase tracking-wider font-bold text-primary mt-1">Conf: {hist.confidence}%</p>
+                   </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Asset Result Panel ───────────────────────────────────────────────────────
 
-function AssetPanel({ asset, onchainHistory, onchainFlags }: { asset: HorizonAsset; risk: RiskReport; onchainHistory: OnchainRisk[]; onchainFlags: OnchainFlag[] }) {
+interface AssetPanelProps {
+  asset: HorizonAsset;
+  onchainHistory: OnchainRisk[];
+  onchainFlags: OnchainFlag[];
+}
+
+function AssetPanel({ asset, onchainHistory, onchainFlags }: AssetPanelProps) {
   const totalSupply = parseFloat(asset.balances?.authorized ?? "0")
     + parseFloat(asset.balances?.authorized_to_maintain_liabilities ?? "0");
 
   return (
     <div className="space-y-4">
+      <FlagBanner flags={onchainFlags} />
+      
       {/* Identity */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
+      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+          <div className="flex-1 w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-lg font-bold text-primary uppercase">
                 {asset.asset_code.slice(0, 2)}
               </div>
               <div>
-                <h3 className="text-base font-semibold">{asset.asset_code}</h3>
-                <p className="text-xs text-sentio-text-muted capitalize">{asset.asset_type.replace("_", " ")}</p>
+                <h2 className="text-3xl font-bold flex items-center gap-3">
+                  {asset.asset_code}
+                  <span className="inline-flex rounded-full bg-white/10 text-sentio-text-secondary px-2.5 py-1 text-xs font-semibold tracking-wide uppercase self-center translate-y-0.5">
+                    {asset.asset_type.replace("_", " ")}
+                  </span>
+                </h2>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-1.5">
-              <span className="font-mono text-xs text-sentio-text-muted">
-                {shortAddress(asset.asset_issuer)}
-              </span>
-              <CopyButton text={asset.asset_issuer} />
-              <a
-                href={`https://stellar.expert/explorer/public/asset/${asset.asset_code}-${asset.asset_issuer}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1 text-sentio-text-muted hover:text-foreground"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 bg-black/40 rounded-xl p-4 border border-white/5 w-full">
+              <span className="text-xs font-semibold uppercase tracking-widest text-sentio-text-muted whitespace-nowrap">Issuer Details:</span>
+              <div className="flex flex-1 items-center gap-2 overflow-hidden w-full">
+                <span className="font-mono text-sm text-white truncate w-full flex-1" title={asset.asset_issuer}>
+                  {asset.asset_issuer}
+                </span>
+                <div className="flex shrink-0">
+                  <CopyButton text={asset.asset_issuer} />
+                  <a
+                    href={`https://stellar.expert/explorer/public/asset/${asset.asset_code}-${asset.asset_issuer}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1 flex p-1.5 rounded-md text-sentio-text-muted hover:text-white transition-colors hover:bg-white/10"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
           {asset._links?.toml?.href && (
@@ -465,128 +431,139 @@ function AssetPanel({ asset, onchainHistory, onchainFlags }: { asset: HorizonAss
               href={asset._links.toml.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-xl border border-foreground/10 bg-sentio-surface px-3 py-1.5 text-xs font-medium text-sentio-text-muted hover:text-foreground"
+              className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-colors shrink-0"
             >
-              <Globe className="h-3.5 w-3.5" />
-              stellar.toml
+              <Globe className="h-4 w-4" />
+              View stellar.toml
             </a>
           )}
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { icon: Users, label: "Authorized Holders", value: fmt(asset.accounts?.authorized ?? 0, 0) },
-            { icon: TrendingUp, label: "Supply", value: fmt(totalSupply, 2) },
+            { icon: TrendingUp, label: "Total Supply", value: fmt(totalSupply, 2) },
             { icon: Layers, label: "Liquidity Pools", value: `${asset.num_liquidity_pools ?? 0}` },
-            { icon: Shield, label: "Claimable Bal.", value: `${asset.num_claimable_balances ?? 0}` },
+            { icon: Shield, label: "Claimable Balances", value: `${asset.num_claimable_balances ?? 0}` },
           ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-3">
-              <div className="flex items-center gap-1.5">
-                <Icon className="h-3.5 w-3.5 text-sentio-text-muted" />
-                <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">{label}</span>
+            <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-4">
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-sentio-text-muted" />
+                <span className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted">{label}</span>
               </div>
-              <p className="mt-1.5 font-mono text-base font-semibold text-foreground">{value}</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Flags */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">Asset Flags</h3>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(asset.flags).map(([k, v]) => (
-            <span
-              key={k}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                v
-                  ? "border border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger"
-                  : "border border-foreground/6 bg-sentio-surface/50 text-sentio-text-muted"
-              }`}
-            >
-              {k.replace(/_/g, " ")} {v ? "✓" : "✗"}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Balance breakdown */}
-      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">Balance Breakdown</h3>
-        <div className="space-y-2">
-          {[
-            { label: "Authorized", value: asset.balances?.authorized ?? "0", holders: asset.accounts?.authorized ?? 0, ok: true },
-            { label: "Auth. to Maintain Liabilities", value: asset.balances?.authorized_to_maintain_liabilities ?? "0", holders: asset.accounts?.authorized_to_maintain_liabilities ?? 0, ok: true },
-            { label: "Unauthorized", value: asset.balances?.unauthorized ?? "0", holders: asset.accounts?.unauthorized ?? 0, ok: false },
-          ].map((row) => (
-            <div key={row.label} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-              <span className={`text-xs ${row.ok ? "text-sentio-text-secondary" : "text-sentio-warning"}`}>
-                {row.label}
-              </span>
-              <div className="text-right">
-                <p className="font-mono text-xs">{parseFloat(row.value).toFixed(4)}</p>
-                <p className="text-[0.6rem] text-sentio-text-muted">{row.holders.toLocaleString()} accounts</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        {(asset.claimable_balances_amount && parseFloat(asset.claimable_balances_amount) > 0) && (
-          <p className="mt-2 text-xs text-sentio-text-muted">
-            Claimable: {parseFloat(asset.claimable_balances_amount).toFixed(4)} ({asset.num_claimable_balances} balances)
-          </p>
-        )}
-      </div>
-
-      {/* Onchain History & Flags */}
-      {onchainFlags.length > 0 && (
-        <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            On-chain Reports
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Flags */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
+            <Shield className="h-4 w-4" /> Asset Protocol Flags
           </h3>
-          <div className="space-y-2">
-            {onchainFlags.map((flag, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-sentio-warning/20 bg-background/50 px-4 py-2.5">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Reason: {flag.reason}</p>
-                  <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
-                    Reporter: {shortAddress(flag.reporter)} · {timeAgo(new Date(flag.timestamp).toISOString())}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.6rem] font-bold text-sentio-warning">
-                    Severity: {flag.severity}/100
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(asset.flags).map(([k, v]) => (
+              <span
+                key={k}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  v
+                    ? "border border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger"
+                    : "border border-foreground/6 bg-sentio-surface/50 text-sentio-text-muted"
+                }`}
+              >
+                {k.replace(/_/g, " ")} {v ? "✓" : "✗"}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Balance breakdown */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
+            <Coins className="h-4 w-4" /> Balance Exposure Breakdown
+          </h3>
+          <div className="space-y-3">
+            {[
+              { label: "Authorized", value: asset.balances?.authorized ?? "0", holders: asset.accounts?.authorized ?? 0, ok: true },
+              { label: "Auth. to Maintain Liab.", value: asset.balances?.authorized_to_maintain_liabilities ?? "0", holders: asset.accounts?.authorized_to_maintain_liabilities ?? 0, ok: true },
+              { label: "Unauthorized", value: asset.balances?.unauthorized ?? "0", holders: asset.accounts?.unauthorized ?? 0, ok: false },
+            ].map((row) => (
+              <div key={row.label} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${row.ok ? 'border-foreground/5 bg-sentio-surface/30' : 'border-sentio-danger/20 bg-sentio-danger/5'}`}>
+                <div className="font-medium text-sm">
+                  <span className={row.ok ? "text-sentio-text-secondary" : "text-sentio-danger flex items-center gap-1"}>
+                    {!row.ok && <AlertCircle className="h-3.5 w-3.5" />} {row.label}
                   </span>
                 </div>
+                <div className="text-right">
+                  <p className="font-mono text-base font-semibold">{parseFloat(row.value).toFixed(2)}</p>
+                  <p className="text-[0.65rem] text-sentio-text-muted uppercase tracking-wider font-bold mt-0.5">{row.holders.toLocaleString()} accounts</p>
+                </div>
               </div>
             ))}
           </div>
+          {(asset.claimable_balances_amount && parseFloat(asset.claimable_balances_amount) > 0) && (
+            <div className="mt-3 bg-white/5 rounded-xl p-3 text-sm text-center font-medium">
+              <span className="text-sentio-text-muted mr-2">Claimable Pool:</span> 
+              <span className="font-mono text-white inline-flex items-center gap-1">{parseFloat(asset.claimable_balances_amount).toFixed(4)} <span className="text-xs text-sentio-text-muted">({asset.num_claimable_balances} balances)</span></span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {onchainHistory.length > 0 && (
-        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-sentio-text-muted">
-            On-chain Risk History
-          </h3>
-          <div className="space-y-2">
-            {onchainHistory.map((hist, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-2.5">
-                 <div>
-                   <p className="text-xs font-medium capitalize">Category: {hist.category}</p>
-                   <p className="text-[0.6rem] text-sentio-text-muted mt-0.5">
-                     {timeAgo(new Date(hist.last_updated).toISOString())}
-                   </p>
-                 </div>
-                 <div className="text-right">
-                   <p className="text-sm font-bold opacity-90">{hist.score}/100</p>
-                   <p className="text-[0.6rem] text-sentio-text-muted">Conf: {hist.confidence}%</p>
-                 </div>
-              </div>
-            ))}
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Onchain History & Flags */}
+        {onchainFlags.length > 0 && (
+          <div className="rounded-2xl border border-sentio-warning/40 bg-sentio-warning/5 p-6 flex flex-col max-h-[350px]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-warning flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              On-chain Incident Reports
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {onchainFlags.map((flag, i) => (
+                <div key={i} className="flex flex-col rounded-xl border border-sentio-warning/20 bg-background/60 p-4">
+                  <div className="flex justify-between items-start mb-2">
+                     <p className="text-sm font-bold text-white">Reason: <span className="font-medium text-sentio-warning">"{flag.reason}"</span></p>
+                     <span className="rounded bg-sentio-warning/20 px-2 py-1 text-[0.65rem] uppercase tracking-wider font-bold text-sentio-warning">
+                      Severity: {flag.severity}/100
+                    </span>
+                  </div>
+                  <div className="text-xs flex justify-between text-sentio-text-muted mt-2 border-t border-white/5 pt-2">
+                    <span className="font-mono">Reporter: {shortAddress(flag.reporter)}</span>
+                    <span>{timeAgo(new Date(flag.timestamp).toISOString())}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {onchainHistory.length > 0 && (
+          <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col max-h-[350px]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              On-chain Risk Assessment History
+            </h3>
+            <div className="space-y-3 overflow-y-auto pr-1">
+              {onchainHistory.map((hist, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/40 px-4 py-3">
+                   <div>
+                     <p className="text-sm font-semibold text-white capitalize">{hist.category}</p>
+                     <p className="text-xs text-sentio-text-muted mt-1">
+                       {timeAgo(new Date(hist.last_updated).toISOString())}
+                     </p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-lg font-bold text-white tabular-nums">{hist.score}<span className="text-sm text-sentio-text-muted font-medium">/100</span></p>
+                     <p className="text-[0.65rem] uppercase tracking-wider font-bold text-primary mt-1">Conf: {hist.confidence}%</p>
+                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -602,7 +579,6 @@ type SearchState =
       mode: "account" | "asset";
       account?: HorizonAccount;
       asset?: HorizonAsset;
-      risk: RiskReport;
       txns: HorizonTransaction[];
       onchainHistory: OnchainRisk[];
       onchainFlags: OnchainFlag[];
@@ -620,15 +596,11 @@ export default function Explorer() {
 
     try {
       const { mode, account, asset } = await searchStellar(trimmed);
-      let risk: RiskReport;
       let txns: HorizonTransaction[] = [];
 
       if (mode === "account" && account) {
-        risk = scoreAccount(account);
         txns = await fetchAccountTransactions(account.account_id, 10);
-      } else if (asset) {
-        risk = scoreAsset(asset);
-      } else {
+      } else if (!asset) {
         throw new Error("No results found.");
       }
 
@@ -645,12 +617,12 @@ export default function Explorer() {
            ]);
            onchainHistory = histRes.history || [];
            onchainFlags = flagsRes.flags || [];
-        } catch (e) {
+        } catch {
            console.warn("Failed to fetch onchain data");
         }
       }
 
-      setState({ status: "done", mode, account, asset, risk, txns, onchainHistory, onchainFlags });
+      setState({ status: "done", mode, account, asset, txns, onchainHistory, onchainFlags });
     } catch (err) {
       setState({
         status: "error",
@@ -671,7 +643,7 @@ export default function Explorer() {
   return (
     <PageLayout>
       {/* Navbar */}
-      <header className="flex items-center justify-between gap-4 py-5">
+      <header className="flex items-center justify-between gap-4 py-5 mb-4">
         <BrandMark to="/" size="lg" />
         <Link
           to="/"
@@ -683,29 +655,29 @@ export default function Explorer() {
       </header>
 
       {/* Page title */}
-      <div className="mb-8 animate-fade-in-up">
+      <div className="mb-8 animate-fade-in-up md:text-center md:flex md:flex-col md:items-center">
         <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
-          Stellar Risk Explorer
+          Stellar Explorer
         </span>
         <h1 className="text-display mt-4 max-w-[24ch]">
-          Analyse any <strong>account</strong> or{" "}
+          Search any <strong>account</strong> or{" "}
           <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-bold text-transparent">
             asset
           </span>
         </h1>
-        <p className="text-body-lg mt-3 max-w-lg">
-          Enter a Stellar account address or asset code to get a live risk analysis.
+        <p className="text-body-lg mt-4 max-w-lg">
+          Enter a Stellar account address or asset code to retrieve details on-chain.
         </p>
       </div>
 
       {/* Search bar */}
-      <div className="mb-8">
+      <div className="mb-10 max-w-2xl mx-auto">
         <form
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="flex gap-2"
+          className="flex flex-col sm:flex-row gap-2 shadow-sentio-lg rounded-2xl"
         >
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sentio-text-muted" />
+            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-sentio-text-muted" />
             <input
               ref={inputRef}
               id="explorer-search"
@@ -715,24 +687,24 @@ export default function Explorer() {
               placeholder="GXXXXXX... or USDC or USDC:GXXXX..."
               autoComplete="off"
               spellCheck={false}
-              className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-3.5 pl-11 pr-4 font-mono text-sm text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+              className="w-full rounded-2xl border border-foreground/10 bg-sentio-surface/80 py-4 pl-12 pr-4 font-mono text-sm sm:text-base text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/20 shadow-inner"
             />
           </div>
           <button
             id="explorer-scan-btn"
             type="submit"
             disabled={!query.trim() || isLoading}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-8 py-4 text-sm sm:text-base font-bold text-primary-foreground transition hover:opacity-90 hover:shadow-sentio-glow disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? (
               <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Scanning…
+                <RefreshCw className="h-5 w-5 animate-spin" />
+                Searching…
               </>
             ) : (
               <>
-                <Shield className="h-4 w-4" />
-                Scan
+                <Search className="h-5 w-5" />
+                Search
               </>
             )}
           </button>
@@ -740,7 +712,7 @@ export default function Explorer() {
 
         {/* Example hints */}
         {state.status === "idle" && (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             {[
               "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX",
               "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
@@ -749,7 +721,7 @@ export default function Explorer() {
               <button
                 key={ex}
                 onClick={() => { setQuery(ex); handleSearch(ex); }}
-                className="rounded-lg border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 font-mono text-[0.7rem] text-sentio-text-muted transition hover:text-foreground"
+                className="rounded-xl border border-foreground/8 bg-sentio-surface/50 px-3 py-2 font-mono text-[0.7rem] sm:text-xs text-sentio-text-muted transition hover:text-foreground hover:bg-white/5 active:scale-95"
               >
                 {ex.length > 30 ? `${ex.slice(0, 18)}…` : ex}
               </button>
@@ -766,16 +738,16 @@ export default function Explorer() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-6 flex items-start gap-3 rounded-2xl border border-sentio-danger/20 bg-sentio-danger/8 p-4"
+            className="mb-8 mx-auto max-w-2xl flex items-start gap-4 rounded-2xl border border-sentio-danger/30 bg-sentio-danger/10 p-5 shadow-sentio-md"
           >
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sentio-danger" />
-            <div>
-              <p className="text-sm font-semibold text-sentio-danger">Scan failed</p>
-              <p className="mt-0.5 text-xs text-sentio-danger/80">{state.message}</p>
+            <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-sentio-danger" />
+            <div className="flex-1">
+              <p className="text-base font-bold text-sentio-danger">Search failed</p>
+              <p className="mt-1 text-sm text-sentio-danger/90">{state.message}</p>
             </div>
             <button
               onClick={reset}
-              className="ml-auto text-xs text-sentio-text-muted hover:text-foreground"
+              className="text-xs font-semibold uppercase tracking-wider text-sentio-text-muted hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
             >
               Dismiss
             </button>
@@ -785,22 +757,17 @@ export default function Explorer() {
         {isLoading && (
           <motion.div
             key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="grid gap-6 lg:grid-cols-[280px_1fr]"
+            className="max-w-5xl mx-auto mt-8 w-full"
           >
-            <div className="flex flex-col items-center gap-4 rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
-              <Skeleton className="h-[140px] w-[140px] rounded-full" />
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="h-2 w-40" />
-              <Skeleton className="h-2 w-36" />
-              <div className="mt-2 w-full space-y-2">
-                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
-            </div>
             <div className="space-y-4">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-36 w-full" />)}
+              <Skeleton className="h-48 w-full rounded-2xl" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Skeleton className="h-64 w-full rounded-2xl" />
+                <Skeleton className="h-64 w-full rounded-2xl" />
+              </div>
             </div>
           </motion.div>
         )}
@@ -808,75 +775,26 @@ export default function Explorer() {
         {isDone && state.status === "done" && (
           <motion.div
             key="results"
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="grid gap-6 lg:grid-cols-[340px_1fr]"
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="max-w-5xl mx-auto mt-8 w-full"
           >
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
-                <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
-                  Risk Score
-                </p>
-                <div className="flex justify-center">
-                  <RiskRing
-                    score={state.risk.overallScore}
-                    color={state.risk.color}
-                    label={state.risk.label}
-                  />
-                </div>
-                <p className="mt-4 text-center text-xs text-sentio-text-muted">
-                  {state.risk.summary}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-xl border border-foreground/6 bg-sentio-surface/40 px-4 py-2.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                <span className="text-xs text-sentio-text-muted capitalize">
-                  {state.mode === "account" ? "Stellar Account" : "Stellar Asset"}
-                </span>
-                <button
-                  onClick={reset}
-                  className="ml-auto text-[0.65rem] text-sentio-text-muted hover:text-foreground"
-                >
-                  New scan
-                </button>
-              </div>
-
-              <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-5">
-                <div className="mb-3 flex items-center gap-1.5">
-                  <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
-                    Risk Factors
-                  </p>
-                  <Info className="h-3 w-3 text-sentio-text-muted" />
-                </div>
-                <div className="space-y-2">
-                  {state.risk.factors.map(f => (
-                    <FactorRow key={f.id} factor={f} />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              {state.mode === "account" && state.account && (
-                <AccountPanel
-                  account={state.account}
-                  risk={state.risk}
-                  txns={state.txns}
-                  onchainHistory={state.onchainHistory}
-                  onchainFlags={state.onchainFlags}
-                />
-              )}
-              {state.mode === "asset" && state.asset && (
-                <AssetPanel 
-                  asset={state.asset} 
-                  risk={state.risk}
-                  onchainHistory={state.onchainHistory}
-                  onchainFlags={state.onchainFlags}
-                />
-              )}
-            </div>
+            {state.mode === "account" && state.account && (
+              <AccountPanel
+                account={state.account}
+                txns={state.txns}
+                onchainHistory={state.onchainHistory}
+                onchainFlags={state.onchainFlags}
+              />
+            )}
+            {state.mode === "asset" && state.asset && (
+              <AssetPanel 
+                asset={state.asset} 
+                onchainHistory={state.onchainHistory}
+                onchainFlags={state.onchainFlags}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

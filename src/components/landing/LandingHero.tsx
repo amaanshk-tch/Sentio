@@ -24,16 +24,16 @@ export function LandingHero() {
         className="flex items-center justify-between gap-4 py-5"
       >
         <BrandMark to="/" size="lg" />
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             to="/admin"
-            className="hidden sm:inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-sentio-text-secondary transition-all hover:text-foreground"
+            className="inline-flex items-center gap-2 rounded-xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold text-sentio-text-secondary transition-all hover:text-foreground"
           >
-            Admin Dashboard
+            Admin <span className="hidden sm:inline">Dashboard</span>
           </Link>
           <Link
             to="/explorer"
-            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition-all hover:border-foreground/20 hover:bg-sentio-surface-hover hover:shadow-sentio-md"
+            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition-all hover:border-foreground/20 hover:bg-sentio-surface-hover hover:shadow-sentio-md"
           >
             <span className="hidden sm:inline">Open explorer</span>
             <span className="sm:hidden">Explore</span>

@@ -69,7 +69,11 @@ function useCountUp(target: number | null, duration = 900) {
   const prevRef = useRef(0);
 
   useEffect(() => {
-    if (target === null) { setVal(null); return; }
+    if (target === null) { 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVal(null); 
+      return; 
+    }
     const from = prevRef.current;
     prevRef.current = target;
     const start = performance.now();

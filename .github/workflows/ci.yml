@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           targets: wasm32-unknown-unknown
 
@@ -32,13 +32,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build Soroban Contract
-        working-directory: contracts/risk-registry
-        run: cargo build --target wasm32-unknown-unknown --release
-
       - name: Test Soroban Contract
         working-directory: contracts/risk-registry
         run: cargo test
+
+      - name: Build Soroban Contract
+        working-directory: contracts/risk-registry
+        run: cargo build --target wasm32-unknown-unknown --release
 
   frontend-backend-checks:
     name: Check Frontend & Backend
