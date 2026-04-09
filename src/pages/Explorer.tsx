@@ -15,8 +15,6 @@ import {
   type HorizonAccount, type HorizonAsset, type HorizonTransaction,
 } from "@/lib/stellar";
 
-// ─── Onchain Types ──────────────────────────────────────────────────────────
-
 export interface OnchainRisk {
   score: number;
   confidence: number;

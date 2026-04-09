@@ -1,6 +1,5 @@
 const rateWindows = new Map();
 
-// Periodically clean up expired windows to prevent memory growth
 setInterval(() => {
   const now = Date.now();
   for (const [ip, win] of rateWindows) {
@@ -10,7 +9,6 @@ setInterval(() => {
 
 export function rateLimitMiddleware(maxPerMinute = 30) {
   return (req, res, next) => {
-    // req.ip is reliable because we set app.set("trust proxy", 1) in server/index.js
     const ip  = req.ip || "unknown";
     const now = Date.now();
     const win = rateWindows.get(ip);
