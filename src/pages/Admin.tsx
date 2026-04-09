@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ShieldAlert, Flag, Lock } from "lucide-react";
+import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet } from "lucide-react";
+import { isConnected, getAddress, setAllowed } from "@stellar/freighter-api";
 import { toast } from "sonner";
 
 // The admin token is set in your .env as VITE_ADMIN_TOKEN (frontend) and
@@ -14,6 +15,41 @@ const ENV_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || "";
 export default function Admin() {
   const [token, setToken] = useState(ENV_TOKEN);
   const [unlocked, setUnlocked] = useState(Boolean(ENV_TOKEN));
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        if (await isConnected()) {
+          const data = await getAddress();
+          if (data && data.address) setWalletAddress(data.address);
+        }
+      } catch (err) {
+        console.error("Freighter connection check failed", err);
+      }
+    };
+    checkConnection();
+  }, []);
+
+  const handleConnect = async () => {
+    try {
+      if (!await isConnected()) {
+        toast.error("Freighter extension not found. Please install it.");
+        window.open("https://www.freighter.app/", "_blank");
+        return;
+      }
+      // Trigger the Freighter permission popup
+      await setAllowed();
+
+      const data = await getAddress();
+      if (data && data.address) {
+        setWalletAddress(data.address);
+        toast.success("Wallet connected!");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to connect wallet.");
+    }
+  };
 
   // Set Risk State
   const [riskAddress, setRiskAddress]     = useState("");
@@ -91,13 +127,24 @@ export default function Admin() {
     <PageLayout>
       <header className="flex items-center justify-between gap-4 py-5">
         <BrandMark to="/" size="lg" />
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
+        <div className="flex items-center gap-3">
+          {unlocked && (
+            <button
+              onClick={handleConnect}
+              className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary shadow-sentio-sm backdrop-blur-md transition hover:bg-primary/20 hover:border-primary/30 active:scale-95"
+            >
+              <Wallet className="h-4 w-4" />
+              {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : "Connect Wallet"}
+            </button>
+          )}
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Link>
+        </div>
       </header>
 
       <div className="mb-8 animate-fade-in-up">
