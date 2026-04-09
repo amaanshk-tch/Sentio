@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
@@ -17,19 +17,6 @@ export default function Admin() {
   const [unlocked, setUnlocked] = useState(Boolean(ENV_TOKEN));
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        if (await isConnected()) {
-          const data = await getAddress();
-          if (data && data.address) setWalletAddress(data.address);
-        }
-      } catch (err) {
-        console.error("Freighter connection check failed", err);
-      }
-    };
-    checkConnection();
-  }, []);
 
   const handleConnect = async () => {
     try {
@@ -139,6 +126,7 @@ export default function Admin() {
           )}
           <Link
             to="/"
+            onClick={() => setWalletAddress(null)}
             className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -192,7 +180,7 @@ export default function Admin() {
               <Lock className="h-4 w-4" /> Authenticated
             </p>
             <button
-              onClick={() => { setToken(""); setUnlocked(false); }}
+              onClick={() => { setToken(""); setUnlocked(false); setWalletAddress(null); }}
               className="text-xs text-sentio-text-muted hover:text-foreground transition-colors"
             >
               Sign out
