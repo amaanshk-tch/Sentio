@@ -236,7 +236,7 @@ export function NetworkCard() {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(263_70%_58%/0.07),transparent_60%)]" />
 
-      <div className="relative z-10 p-5">
+      <div className="relative z-10 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[0.6rem] font-semibold tracking-widest text-sentio-text-muted">
@@ -266,7 +266,7 @@ export function NetworkCard() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <StatTile
             label="Current Ledger"
             value={ledgerAnimated !== null ? fmtLarge(ledgerAnimated) : null}

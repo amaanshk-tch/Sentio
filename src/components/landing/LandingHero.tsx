@@ -103,12 +103,12 @@ export function LandingHero() {
         </div>
 
         <motion.div
-          className="relative flex flex-col items-center justify-center lg:items-end"
+          className="relative flex flex-col items-center justify-center lg:items-end lg:translate-x-10 translate-y-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="w-full max-w-[400px] animate-float" style={{ animationDelay: "0s" }}>
+          <div className="w-full max-w-[420px]">
             <NetworkCard />
           </div>
         </motion.div>
