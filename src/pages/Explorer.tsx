@@ -4,15 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, ArrowLeft, Shield, AlertTriangle, Clock, Globe,
   Layers, Key, Coins, Users, TrendingUp, ExternalLink,
-  Copy, Check, RefreshCw, AlertCircle, Info
+  Copy, Check, RefreshCw, AlertCircle, Info, Activity, Wifi, WifiOff, FileCode
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  searchStellar, fetchAccountTransactions,
-  type HorizonAccount, type HorizonAsset, type HorizonTransaction,
+  searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger,
+  type HorizonAccount, type HorizonAsset, type HorizonTransaction, type HorizonOperation, type LedgerStats,
 } from "@/lib/stellar";
 
 export interface OnchainRisk {
@@ -27,6 +27,131 @@ export interface OnchainFlag {
   reason: string;
   severity: number;
   timestamp: number;
+}
+
+interface ScanContribution {
+  key?: string;
+  label: string;
+  impact: number;
+  baseImpact?: number;
+}
+
+interface ScanBreakdownItem {
+  key: string;
+  title: string;
+  value: string;
+  status: string;
+  tone?: string;
+  flag?: string | null;
+}
+
+interface ScanRiskFactors {
+  newAccount?: boolean;
+  highVelocity?: boolean;
+  suspiciousTxPattern?: string | null;
+  noDomain?: boolean;
+  lookalikeAsset?: boolean;
+  poorTrustlineQuality?: boolean;
+  authRequired?: boolean;
+  authRevocable?: boolean;
+  clawbackEnabled?: boolean;
+  highSupply?: boolean;
+  accountListed?: boolean;
+}
+
+interface ScanResult {
+  score: number;
+  risk: string;
+  level?: "LOW" | "MEDIUM" | "HIGH";
+  confidence: number;
+  reasons: string[];
+  action?: string;
+  trend?: "up" | "down" | "stable";
+  contributions?: ScanContribution[];
+  breakdown?: ScanBreakdownItem[];
+  riskFactors?: ScanRiskFactors;
+  insight?: string;
+  lastUpdated?: number;
+}
+
+interface ContractScanResult {
+  type: "contract";
+  contractId: string;
+  score: number;
+  risk: string;
+  color: string;
+  confidence: number;
+  flags: string[];
+  insights: string[];
+  recommendation: string;
+  summary: string;
+  metadata: { ageDays: number | null; contractType: string; deployer: string | null };
+  behavior: { invocationCount: number; eventCount: number; uniqueCallers: number; dominantCallerRatio: number };
+  riskBreakdown: Record<string, boolean | number>;
+  events: { categories: Record<string, number>; raw: unknown[] };
+  trend: { direction: string; history: unknown[] };
+  onchainRiskData: OnchainRisk | null;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// ─── WebSocket live stream hook ───────────────────────────────────────────────
+
+type StreamStatus = "idle" | "live" | "stopped";
+
+function useLiveStream(
+  accountId: string | null,
+  onUpdate: (patch: Partial<ScanResult>) => void,
+): { status: StreamStatus; lastTxId: string | null } {
+  const wsRef   = useRef<WebSocket | null>(null);
+  const [status, setStatus]   = useState<StreamStatus>("idle");
+  const [lastTxId, setLastTxId] = useState<string | null>(null);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  useEffect(() => {
+    // close any previous socket
+    wsRef.current?.close();
+    wsRef.current = null;
+    setStatus("idle");
+    setLastTxId(null);
+
+    if (!accountId) return;
+
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "subscribe", accountId }));
+      setStatus("live");
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data as string);
+        if (msg.type === "update") {
+          const { type: _t, newTx, ...scanPatch } = msg;
+          if (newTx?.id) setLastTxId(newTx.id as string);
+          onUpdateRef.current(scanPatch as Partial<ScanResult>);
+        } else if (msg.type === "stream_stopped") {
+          setStatus("stopped");
+        }
+      } catch {}
+    };
+
+    ws.onerror  = () => setStatus("stopped");
+    ws.onclose  = () => setStatus((s) => s === "live" ? "stopped" : s);
+
+    return () => {
+      ws.send(JSON.stringify({ type: "unsubscribe" }));
+      ws.close();
+      wsRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId]);
+
+  return { status, lastTxId };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,6 +186,13 @@ function deriveRiskLabel(score: number): { label: string; color: string; bg: str
   if (score <= 65) return { label: "Moderate",  color: "text-sentio-warning",  bg: "bg-sentio-warning/10",  border: "border-sentio-warning/30" };
   if (score <= 80) return { label: "High Risk", color: "text-orange-400",      bg: "bg-orange-400/10",      border: "border-orange-400/30" };
   return               { label: "Critical",   color: "text-sentio-danger",   bg: "bg-sentio-danger/10",   border: "border-sentio-danger/30" };
+}
+
+function levelBadge(level?: "LOW" | "MEDIUM" | "HIGH") {
+  if (level === "LOW") return "border-sentio-success/30 bg-sentio-success/10 text-sentio-success";
+  if (level === "MEDIUM") return "border-sentio-warning/30 bg-sentio-warning/10 text-sentio-warning";
+  if (level === "HIGH") return "border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger";
+  return "border-foreground/10 bg-foreground/5 text-sentio-text-muted";
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -119,6 +251,152 @@ function RiskScoreCard({ onchainHistory }: { onchainHistory: OnchainRisk[] }) {
   );
 }
 
+// Risk factor pill metadata
+const RISK_FACTOR_META: Record<string, { label: string; variant: "danger" | "warning" | "muted" }> = {
+  newAccount:           { label: "New account",           variant: "danger"  },
+  highVelocity:         { label: "High velocity",         variant: "danger"  },
+  noDomain:             { label: "No domain",             variant: "warning" },
+  lookalikeAsset:       { label: "Lookalike asset",       variant: "danger"  },
+  poorTrustlineQuality: { label: "Poor trustlines",       variant: "warning" },
+  authRequired:         { label: "Auth required",         variant: "warning" },
+  authRevocable:        { label: "Auth revocable",        variant: "warning" },
+  clawbackEnabled:      { label: "Clawback enabled",      variant: "danger"  },
+  highSupply:           { label: "High supply",           variant: "warning" },
+};
+
+const VARIANT_STYLES = {
+  danger:  "border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger",
+  warning: "border-sentio-warning/30 bg-sentio-warning/10 text-sentio-warning",
+  muted:   "border-foreground/10 bg-sentio-surface/50 text-sentio-text-muted",
+};
+
+function RiskFactorPills({ riskFactors }: { riskFactors: ScanRiskFactors }) {
+  const active: { key: string; label: string; variant: "danger" | "warning" | "muted" }[] = [];
+
+  for (const [key, meta] of Object.entries(RISK_FACTOR_META)) {
+    const val = riskFactors[key as keyof ScanRiskFactors];
+    if (val) active.push({ key, ...meta });
+  }
+  // suspiciousTxPattern is a string, not a boolean
+  if (riskFactors.suspiciousTxPattern) {
+    active.push({
+      key: "suspiciousTxPattern",
+      label: `Pattern: ${riskFactors.suspiciousTxPattern.replace(/_/g, " ")}`,
+      variant: "danger",
+    });
+  }
+
+  if (active.length === 0) return null;
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {active.map(({ key, label, variant }) => (
+        <span
+          key={key}
+          className={`inline-flex rounded-md border px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${VARIANT_STYLES[variant]}`}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function EngineRiskCard({ scan }: { scan: ScanResult | null }) {
+  if (!scan) return null;
+  const { label, color, bg, border } = deriveRiskLabel(scan.score);
+  const topContribs = (scan.contributions ?? []).slice(0, 5);
+  const topReasons = (scan.reasons ?? []).slice(0, 4);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`mb-6 rounded-2xl border ${border} ${bg} p-5`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-sentio-text-muted mb-1">Risk Engine Analysis</p>
+          <p className={`text-4xl font-bold tabular-nums ${color}`}>
+            {scan.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
+          </p>
+          <p className={`mt-1 text-sm font-semibold ${color}`}>{label}</p>
+        </div>
+        <div className="text-right">
+          <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-bold ${levelBadge(scan.level)}`}>
+            {scan.level ?? scan.risk}
+          </span>
+          <p className="text-xs text-sentio-text-muted mt-2">Confidence: {scan.confidence}%</p>
+          {scan.lastUpdated && (
+            <p className="text-xs text-sentio-text-muted mt-0.5">
+              Updated {timeAgo(new Date(scan.lastUpdated).toISOString())}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Risk factor pills — truthy flags only */}
+      {scan.riskFactors && <RiskFactorPills riskFactors={scan.riskFactors} />}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-foreground/8 bg-sentio-surface/40 p-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted mb-3">Top Reasons</p>
+          {topReasons.length === 0 ? (
+            <p className="text-sm text-sentio-text-muted">No major risk reasons found.</p>
+          ) : (
+            <div className="space-y-2">
+              {topReasons.map((reason, idx) => (
+                <div key={`${reason}-${idx}`} className="flex items-start gap-2 text-sm text-foreground">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  <span>{reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-foreground/8 bg-sentio-surface/40 p-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted mb-3">Signal Impact</p>
+          {topContribs.length === 0 ? (
+            <p className="text-sm text-sentio-text-muted">No weighted contributors available.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {topContribs.map((c, idx) => {
+                const width = Math.max(6, Math.min(100, (c.impact / 30) * 100));
+                return (
+                  <div key={`${c.label}-${idx}`}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-sentio-text-secondary">{c.label}</span>
+                      <span className="font-mono text-foreground">{c.impact.toFixed(1)}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/10">
+                      <div className="h-2 rounded-full bg-linear-to-r from-primary to-accent" style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {scan.action && (
+        <div className="mt-4 rounded-xl border border-foreground/8 bg-black/20 px-4 py-3 text-sm text-sentio-text-secondary">
+          <span className="font-semibold text-foreground">Recommended action:</span> {scan.action}
+        </div>
+      )}
+
+      {/* Insight callout — human-readable summary sentence */}
+      {scan.insight && (
+        <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/8 px-4 py-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <p className="text-sm text-sentio-text-secondary leading-relaxed">{scan.insight}</p>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── 24h Flag Banner ──────────────────────────────────────────────────────────
 
 function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
@@ -154,6 +432,105 @@ function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
             Max Severity: {maxSeverity}/100
           </span>
         </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Scan Breakdown Card ─────────────────────────────────────────────────────
+
+const toneStyles: Record<string, { border: string; bg: string; text: string; badge: string; dot: string }> = {
+  emerald: {
+    border: "border-emerald-500/25",
+    bg:     "bg-emerald-500/8",
+    text:   "text-emerald-400",
+    badge:  "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
+    dot:    "bg-emerald-400",
+  },
+  rose: {
+    border: "border-rose-500/25",
+    bg:     "bg-rose-500/8",
+    text:   "text-rose-400",
+    badge:  "bg-rose-500/15 text-rose-400 border border-rose-500/25",
+    dot:    "bg-rose-400",
+  },
+  amber: {
+    border: "border-amber-500/25",
+    bg:     "bg-amber-500/8",
+    text:   "text-amber-400",
+    badge:  "bg-amber-500/15 text-amber-400 border border-amber-500/25",
+    dot:    "bg-amber-400",
+  },
+  slate: {
+    border: "border-foreground/8",
+    bg:     "bg-sentio-surface/40",
+    text:   "text-sentio-text-muted",
+    badge:  "bg-white/5 text-sentio-text-muted border border-foreground/8",
+    dot:    "bg-sentio-text-muted",
+  },
+};
+
+const breakdownIcons: Record<string, React.ElementType> = {
+  age:        Clock,
+  tx:         Activity,
+  trustlines: Layers,
+  domain:     Globe,
+  supply:     TrendingUp,
+  flags:      Shield,
+};
+
+function ScanBreakdownCard({ breakdown }: { breakdown: ScanBreakdownItem[] }) {
+  if (!breakdown || breakdown.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6"
+    >
+      <p className="mb-4 text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+        <Activity className="h-3.5 w-3.5" /> Signal Breakdown
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {breakdown.map((item) => {
+          const tone   = toneStyles[item.tone ?? "slate"] ?? toneStyles.slate;
+          const Icon   = breakdownIcons[item.key] ?? Info;
+          return (
+            <div
+              key={item.key}
+              className={`relative flex flex-col gap-2 rounded-xl border p-4 transition-colors ${tone.border} ${tone.bg}`}
+            >
+              {/* Header row */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${tone.text}`} />
+                  <span className="text-[0.6rem] font-bold uppercase tracking-widest text-sentio-text-muted leading-none">
+                    {item.title}
+                  </span>
+                </div>
+              </div>
+
+              {/* Value */}
+              <p className={`text-base font-bold leading-snug ${item.value === "—" ? "text-sentio-text-muted" : "text-foreground"}`}>
+                {item.value}
+              </p>
+
+              {/* Status badge */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${tone.badge}`}>
+                  {item.status}
+                </span>
+                {item.flag && (
+                  <span className="inline-flex rounded-md border border-sentio-warning/25 bg-sentio-warning/10 px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-sentio-warning">
+                    {item.flag.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -229,16 +606,20 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
 interface AccountPanelProps {
   account: HorizonAccount;
   txns: HorizonTransaction[];
+  ops: HorizonOperation[];
   onchainHistory: OnchainRisk[];
   onchainFlags: OnchainFlag[];
+  scanResult: ScanResult | null;
 }
 
-function AccountPanel({ account, txns, onchainHistory, onchainFlags }: AccountPanelProps) {
+function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanResult }: AccountPanelProps) {
   const xlmBal = account.balances.find(b => b.asset_type === "native");
   const tokens = account.balances.filter(b => b.asset_type !== "native" && b.asset_type !== "liquidity_pool_shares");
 
   return (
     <div className="space-y-4">
+      <EngineRiskCard scan={scanResult} />
+      {scanResult?.breakdown && <ScanBreakdownCard breakdown={scanResult.breakdown} />}
       <RiskScoreCard onchainHistory={onchainHistory} />
       <FlagBanner flags={onchainFlags} />
 
@@ -438,6 +819,35 @@ function AccountPanel({ account, txns, onchainHistory, onchainFlags }: AccountPa
           {onchainHistory.length > 0 && <OnchainHistoryCard history={onchainHistory} />}
         </div>
       )}
+
+      {/* Recent Operations */}
+      {ops.length > 0 && (
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[350px] flex flex-col">
+          <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
+            <Activity className="h-4 w-4" /> Recent Operations ({ops.length})
+          </h3>
+          <div className="space-y-2.5 overflow-y-auto pr-1">
+            {ops.map((op) => (
+              <div key={op.id} className="flex items-center justify-between rounded-xl border border-foreground/5 bg-sentio-surface/30 px-4 py-3">
+                <div className="overflow-hidden">
+                  <p className="text-sm font-semibold text-foreground capitalize">
+                    {op.type.replace(/_/g, " ")}
+                  </p>
+                  <p className="text-xs text-sentio-text-muted mt-0.5">{timeAgo(op.created_at)}</p>
+                </div>
+                <a
+                  href={`https://stellar.expert/explorer/public/op/${op.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 ml-2 p-2 rounded-lg bg-white/5 text-sentio-text-muted hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -448,14 +858,17 @@ interface AssetPanelProps {
   asset: HorizonAsset;
   onchainHistory: OnchainRisk[];
   onchainFlags: OnchainFlag[];
+  scanResult: ScanResult | null;
 }
 
-function AssetPanel({ asset, onchainHistory, onchainFlags }: AssetPanelProps) {
+function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPanelProps) {
   const totalSupply = parseFloat(asset.balances?.authorized ?? "0")
     + parseFloat(asset.balances?.authorized_to_maintain_liabilities ?? "0");
 
   return (
     <div className="space-y-4">
+      <EngineRiskCard scan={scanResult} />
+      {scanResult?.breakdown && <ScanBreakdownCard breakdown={scanResult.breakdown} />}
       <RiskScoreCard onchainHistory={onchainHistory} />
       <FlagBanner flags={onchainFlags} />
 
@@ -591,6 +1004,180 @@ function AssetPanel({ asset, onchainHistory, onchainFlags }: AssetPanelProps) {
   );
 }
 
+// ─── Contract Panel ────────────────────────────────────────────────────────────
+
+function ContractPanel({ result }: { result: ContractScanResult }) {
+  const { label, color, bg, border } = deriveRiskLabel(result.score);
+  const activeFlags = Object.entries(result.riskBreakdown ?? {})
+    .filter(([, v]) => Boolean(v))
+    .map(([k]) => k);
+
+  return (
+    <div className="space-y-4">
+      {/* Score card */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`rounded-2xl border ${border} ${bg} p-5`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-sentio-text-muted mb-1">Contract Risk Analysis</p>
+            <p className={`text-4xl font-bold tabular-nums ${color}`}>
+              {result.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
+            </p>
+            <p className={`mt-1 text-sm font-semibold ${color}`}>{label}</p>
+          </div>
+          <div className="text-right">
+            <span className="inline-flex rounded-lg border border-foreground/10 bg-sentio-surface/50 px-2.5 py-1 text-xs font-bold text-foreground capitalize">
+              {result.risk}
+            </span>
+            <p className="text-xs text-sentio-text-muted mt-2">Confidence: {result.confidence}%</p>
+          </div>
+        </div>
+
+        {/* Risk breakdown flags */}
+        {activeFlags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {activeFlags.map((f) => (
+              <span key={f} className="inline-flex rounded-md border border-sentio-danger/30 bg-sentio-danger/10 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-sentio-danger">
+                {f.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Insight callout */}
+        {result.insights && result.insights.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {result.insights.map((ins, i) => (
+              <div key={i} className="flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/8 px-4 py-2.5">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="text-sm text-sentio-text-secondary leading-relaxed">{ins}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recommendation */}
+        {result.recommendation && (
+          <div className="mt-3 rounded-xl border border-foreground/8 bg-black/20 px-4 py-3 text-sm text-sentio-text-secondary">
+            <span className="font-semibold text-foreground">Recommendation:</span> {result.recommendation}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Identity + summary */}
+      <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
+            <FileCode className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <span className="inline-flex rounded-full bg-primary/20 text-primary px-2.5 py-0.5 text-xs font-semibold tracking-wide uppercase">Soroban Contract</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mb-4">
+          <p className="font-mono text-sm break-all text-white flex-1">{result.contractId}</p>
+          <CopyButton text={result.contractId} />
+          <a
+            href={`https://stellar.expert/explorer/public/contract/${result.contractId}`}
+            target="_blank" rel="noopener noreferrer"
+            className="p-1.5 text-sentio-text-muted hover:text-white transition-colors"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </div>
+        {result.summary && (
+          <p className="text-sm text-sentio-text-secondary">{result.summary}</p>
+        )}
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { icon: Activity,   label: "Invocations",     value: result.behavior.invocationCount.toLocaleString() },
+            { icon: Users,      label: "Unique Callers",  value: result.behavior.uniqueCallers.toLocaleString() },
+            { icon: TrendingUp, label: "Events",          value: result.behavior.eventCount.toLocaleString() },
+            { icon: Clock,      label: "Age (days)",      value: result.metadata.ageDays != null ? String(result.metadata.ageDays) : "Unknown" },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-4">
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-sentio-text-muted" />
+                <span className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted">{label}</span>
+              </div>
+              <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Behavior + events */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Dominant caller ratio */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+            <Users className="h-4 w-4" /> Caller Concentration
+          </h3>
+          <div className="flex items-end gap-3">
+            <p className="text-3xl font-bold tabular-nums text-foreground">
+              {(result.behavior.dominantCallerRatio * 100).toFixed(1)}%
+            </p>
+            <p className="text-sm text-sentio-text-muted mb-1">of invocations from single caller</p>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-white/10">
+            <div
+              className={`h-2 rounded-full ${
+                result.behavior.dominantCallerRatio > 0.8 ? "bg-sentio-danger" :
+                result.behavior.dominantCallerRatio > 0.5 ? "bg-sentio-warning" : "bg-sentio-success"
+              }`}
+              style={{ width: `${Math.min(100, result.behavior.dominantCallerRatio * 100)}%` }}
+            />
+          </div>
+          {result.metadata.deployer && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-sentio-text-muted">
+              <span className="font-semibold uppercase tracking-wider">Deployer:</span>
+              <span className="font-mono truncate">{shortAddress(result.metadata.deployer)}</span>
+              <CopyButton text={result.metadata.deployer} />
+            </div>
+          )}
+        </div>
+
+        {/* Event categories */}
+        <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+            <Layers className="h-4 w-4" /> Event Categories
+          </h3>
+          {Object.keys(result.events?.categories ?? {}).length === 0 ? (
+            <p className="text-sm text-sentio-text-muted">No events recorded.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {Object.entries(result.events.categories).map(([cat, count]) => {
+                const total = result.behavior.eventCount || 1;
+                const pct = Math.round((count / total) * 100);
+                return (
+                  <div key={cat}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-sentio-text-secondary capitalize">{cat.replace(/_/g, " ")}</span>
+                      <span className="font-mono text-foreground">{count}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/10">
+                      <div className="h-1.5 rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* On-chain risk history if available */}
+      {result.onchainRiskData && (
+        <RiskScoreCard onchainHistory={[result.onchainRiskData]} />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Explorer Page ────────────────────────────────────────────────────────
 
 type SearchState =
@@ -599,12 +1186,16 @@ type SearchState =
   | { status: "error"; message: string }
   | {
       status: "done";
-      mode: "account" | "asset";
+      mode: "account" | "asset" | "contract";
       account?: HorizonAccount;
       asset?: HorizonAsset;
+      contractResult?: ContractScanResult;
       txns: HorizonTransaction[];
+      ops: HorizonOperation[];
       onchainHistory: OnchainRisk[];
       onchainFlags: OnchainFlag[];
+      scanResult: ScanResult | null;
+      ledger: LedgerStats | null;
     };
 
 export default function Explorer() {
@@ -617,16 +1208,41 @@ export default function Explorer() {
     const trimmed = q.trim();
     if (!trimmed) return;
 
-    // Sync query to URL so results are shareable/bookmarkable
     setSearchParams({ q: trimmed }, { replace: true });
     setState({ status: "loading" });
 
+    // Contract ID: starts with C, 56 chars
+    const isContract = /^C[A-Z2-7]{55}$/.test(trimmed);
+
     try {
+      if (isContract) {
+        const res = await fetch("/api/scan/contract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contractId: trimmed }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Contract scan failed." }));
+          throw new Error(err.error ?? "Contract scan failed.");
+        }
+        const contractResult: ContractScanResult = await res.json();
+        setState({
+          status: "done", mode: "contract",
+          contractResult,
+          txns: [], ops: [], onchainHistory: [], onchainFlags: [], scanResult: null, ledger: null,
+        });
+        return;
+      }
+
       const { mode, account, asset } = await searchStellar(trimmed);
       let txns: HorizonTransaction[] = [];
+      let ops: HorizonOperation[] = [];
 
       if (mode === "account" && account) {
-        txns = await fetchAccountTransactions(account.account_id, 10);
+        [txns, ops] = await Promise.all([
+          fetchAccountTransactions(account.account_id, 10),
+          fetchAccountOperations(account.account_id, 10),
+        ]);
       } else if (!asset) {
         throw new Error("No results found.");
       }
@@ -637,21 +1253,31 @@ export default function Explorer() {
 
       let onchainHistory: OnchainRisk[] = [];
       let onchainFlags: OnchainFlag[] = [];
+      let scanResult: ScanResult | null = null;
+      let ledger: LedgerStats | null = null;
 
       if (addressToFetch) {
         try {
-          const [histRes, flagsRes] = await Promise.all([
+          const [histRes, flagsRes, scanRes, ledgerRes] = await Promise.all([
             fetch(`/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
             fetch(`/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] }),
+            fetch("/api/scan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: trimmed }),
+            }).then(r => r.ok ? r.json() : null),
+            fetchLatestLedger(),
           ]);
           onchainHistory = histRes.history || [];
-          onchainFlags = flagsRes.flags || [];
+          onchainFlags   = flagsRes.flags  || [];
+          scanResult     = scanRes;
+          ledger         = ledgerRes;
         } catch {
-          console.warn("Failed to fetch onchain data");
+          console.warn("Failed to fetch onchain or scan data");
         }
       }
 
-      setState({ status: "done", mode, account, asset, txns, onchainHistory, onchainFlags });
+      setState({ status: "done", mode, account, asset, txns, ops, onchainHistory, onchainFlags, scanResult, ledger });
     } catch (err) {
       setState({
         status: "error",
@@ -674,7 +1300,22 @@ export default function Explorer() {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const isDone = state.status === "done";
+  // Live stream — only for account searches
+  const liveAccountId = state.status === "done" && state.mode === "account" && state.account
+    ? state.account.account_id
+    : null;
+
+  const { status: streamStatus, lastTxId } = useLiveStream(
+    liveAccountId,
+    useCallback((patch: Partial<ScanResult>) => {
+      setState((prev) => {
+        if (prev.status !== "done") return prev;
+        return { ...prev, scanResult: prev.scanResult ? { ...prev.scanResult, ...patch } : prev.scanResult };
+      });
+    }, []),
+  );
+
+  const isDone    = state.status === "done";
   const isLoading = state.status === "loading";
 
   return (
@@ -695,13 +1336,14 @@ export default function Explorer() {
           Stellar Explorer
         </span>
         <h1 className="text-display mt-4 max-w-[24ch]">
-          Search any <strong>account</strong> or{" "}
+          Scan any <strong>account</strong>,{" "}
           <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-bold text-transparent">
             asset
           </span>
+          {" "}or contract
         </h1>
         <p className="text-body-lg mt-4 max-w-lg">
-          Enter a Stellar account address or asset code to retrieve on-chain details and risk assessment.
+          Enter a Stellar account address, asset code, or Soroban contract ID to retrieve on-chain details and risk assessment.
         </p>
       </div>
 
@@ -719,7 +1361,7 @@ export default function Explorer() {
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="GXXXXXX... or USDC or USDC:GXXXX..."
+              placeholder="GXXXXXX... or USDC or CXXXXXX... (contract)"
               autoComplete="off"
               spellCheck={false}
               className="w-full rounded-2xl border border-foreground/10 bg-sentio-surface/80 py-4 pl-12 pr-4 font-mono text-sm sm:text-base text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/20 shadow-inner"
@@ -743,9 +1385,10 @@ export default function Explorer() {
         {state.status === "idle" && (
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             {[
-              { label: "Example account", value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
-              { label: "USDC asset",      value: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "XLM (native)",   value: "XLM" },
+              { label: "Example account",  value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
+              { label: "USDC asset",       value: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+              { label: "XLM (native)",    value: "XLM" },
+              { label: "Contract scan",   value: "CBIELTK6YBZJU5UP2WWQEUCYKSCVI3OLFBIUWA4REBDWRGXCF4J2L4G3" },
             ].map(({ label, value }) => (
               <button
                 key={value}
@@ -810,12 +1453,56 @@ export default function Explorer() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="max-w-5xl mx-auto mt-8 w-full"
           >
+            {/* Network ledger bar + stream status — account/asset only */}
+            {state.mode !== "contract" && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-foreground/8 bg-sentio-surface/60 px-5 py-3">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-sentio-text-muted">
+                  {state.ledger ? (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-sentio-success inline-block" />
+                        Ledger <span className="font-mono font-bold text-foreground">#{state.ledger.sequence.toLocaleString()}</span>
+                      </span>
+                      <span>TXs: <strong className="text-foreground">{state.ledger.successful_transaction_count}</strong></span>
+                      <span>Base fee: <strong className="text-foreground">{state.ledger.base_fee_in_stroops} stroops</strong></span>
+                    </>
+                  ) : (
+                    <span className="text-sentio-text-muted">Network stats unavailable</span>
+                  )}
+                </div>
+                {state.mode === "account" && (
+                  <div className="flex items-center gap-2">
+                    {streamStatus === "live" && (
+                      <span className="flex items-center gap-1.5 rounded-full border border-sentio-success/30 bg-sentio-success/10 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-success">
+                        <Wifi className="h-3 w-3" />
+                        Live
+                        <span className="h-1.5 w-1.5 rounded-full bg-sentio-success animate-pulse" />
+                      </span>
+                    )}
+                    {streamStatus === "stopped" && (
+                      <span className="flex items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-text-muted">
+                        <WifiOff className="h-3 w-3" />
+                        Stream ended
+                      </span>
+                    )}
+                    {lastTxId && (
+                      <span className="text-[0.6rem] text-sentio-text-muted font-mono">
+                        last tx: {lastTxId.slice(0, 8)}…
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {state.mode === "account" && state.account && (
               <AccountPanel
                 account={state.account}
                 txns={state.txns}
+                ops={state.ops}
                 onchainHistory={state.onchainHistory}
                 onchainFlags={state.onchainFlags}
+                scanResult={state.scanResult}
               />
             )}
             {state.mode === "asset" && state.asset && (
@@ -823,7 +1510,11 @@ export default function Explorer() {
                 asset={state.asset}
                 onchainHistory={state.onchainHistory}
                 onchainFlags={state.onchainFlags}
+                scanResult={state.scanResult}
               />
+            )}
+            {state.mode === "contract" && state.contractResult && (
+              <ContractPanel result={state.contractResult} />
             )}
           </motion.div>
         )}

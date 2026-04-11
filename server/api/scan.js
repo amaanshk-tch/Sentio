@@ -118,24 +118,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
   const ageDays  = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((now - oldestAt) / 86_400_000)) : null;
 
-  const riskResult = computeRisk({
-    ageDays, txRecentCount, trustlinesCount, domainVerified,
-    accountListed: accountListed ?? false, flags, isAsset, assetSupply,
-    txPattern, trustlineFlags, trustlineQuality, velocity, prevScore,
-  });
-
-  const confidence = computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset });
-
-  if (!isAsset && riskResult.score !== onchainData?.score) {
-    setOnchainRisk(address, {
-      score: riskResult.score,
-      confidence: confidence.score,
-      category: riskResult.risk
-    }).catch((e) => 
-      console.error("[Sentio] On-chain risk logging failed:", e?.message)
-    );
-  }
-
   let counterparties = null;
   if (opsPayload) {
     const ops = Array.isArray(opsPayload?._embedded?.records) ? opsPayload._embedded.records : [];
@@ -157,6 +139,76 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
       } catch {}
     }));
     counterparties = { total, unique, knownVerified };
+  }
+
+  const nonNativeBalances = balances.filter((b) => b?.asset_type && b.asset_type !== "native");
+  const nonNativeAmounts = nonNativeBalances
+    .map((b) => Number.parseFloat(String(b?.balance ?? "0")))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const totalNonNative = nonNativeAmounts.reduce((sum, n) => sum + n, 0);
+  const topTokenBalance = nonNativeAmounts.length > 0 ? Math.max(...nonNativeAmounts) : 0;
+  const tokenConcentration = totalNonNative > 0 ? topTokenBalance / totalNonNative : 0;
+
+  const counterpartyUnique = counterparties?.unique ?? 0;
+  const counterpartyVerified = counterparties?.knownVerified ?? 0;
+  const riskyConnections = Math.max(counterpartyUnique - counterpartyVerified, 0);
+  const totalConnections = Math.max(counterpartyUnique, trustlinesCount, 1);
+
+  const walletData = {
+    accountAgeDays: ageDays ?? 365,
+    tx: {
+      total: txRecentCount ?? 0,
+      last24h: velocity,
+      perHour: velocity / 24,
+    },
+    suspicious: {
+      contractInteractions: txPattern === "bot_spam" ? 3 : txPattern === "burst" ? 2 : 0,
+      flaggedTx: txPattern === "normal" ? 0 : Math.max(1, Math.round(velocity * 0.25)),
+    },
+    network: {
+      riskyConnections,
+      totalConnections,
+    },
+    tokens: {
+      concentration: tokenConcentration,
+      lowTrustExposure: Math.max(0, Math.min(1, 1 - trustlineQuality / 100)),
+    },
+    time: {
+      recentActivityScore: Math.max(0, Math.min(1, velocity / 40)),
+      recentSuspiciousTx: txPattern === "normal" ? 0 : Math.max(0, Math.min(1, velocity / 40)),
+      oldSuspiciousTx: txPattern === "normal"
+        ? 0
+        : Math.max(0, Math.min(1, Math.max(txRecentCount - velocity, 0) / 200)),
+    },
+    meta: {
+      dataCompleteness: [
+        ageDays != null,
+        txRecentCount != null,
+        trustlinesCount != null,
+        domainVerified !== undefined,
+        Array.isArray(account?.balances),
+        counterparties != null,
+      ].filter(Boolean).length / 6,
+    },
+  };
+
+  const riskResult = computeRisk({
+    ageDays, txRecentCount, trustlinesCount, domainVerified,
+    accountListed: accountListed ?? false, flags, isAsset, assetSupply,
+    txPattern, trustlineFlags, trustlineQuality, velocity, prevScore,
+    balances, network: counterparties, walletData, txFlags,
+  });
+
+  const confidence = computeConfidence({ walletData, txRecentCount });
+
+  if (!isAsset && riskResult.score !== onchainData?.score) {
+    setOnchainRisk(address, {
+      score: riskResult.score,
+      confidence,
+      category: riskResult.risk
+    }).catch((e) => 
+      console.error("[Sentio] On-chain risk logging failed:", e?.message)
+    );
   }
 
   const breakdown = [

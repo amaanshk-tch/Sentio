@@ -1,5 +1,5 @@
 
-const RPC_URL = process.env.STELLAR_RPC_MAINNET_URL;
+import { SOROBAN_RPC_URL as RPC_URL } from "../config.js";
 
 let _reqId = 0;
 function nextId() { return ++_reqId; }
@@ -30,10 +30,6 @@ export async function getLatestLedger({ signal } = {}) {
   return rpcCall("getLatestLedger", {}, { signal });
 }
 
-export async function getLedgerEntries(keys, { signal } = {}) {
-  const result = await rpcCall("getLedgerEntries", { keys }, { signal });
-  return result?.entries ?? [];
-}
 
 export async function getTransactions(startLedger, { signal, limit = 200 } = {}) {
   const result = await rpcCall(
@@ -57,6 +53,3 @@ export async function getEvents(startLedger, contractId, { signal, limit = 100 }
   return result?.events ?? [];
 }
 
-export function buildContractInstanceKey(contractId) {
-  return Buffer.from(`CONTRACT_INSTANCE:${contractId}`).toString("base64");
-}

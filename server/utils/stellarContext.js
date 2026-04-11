@@ -1,4 +1,5 @@
-export const HORIZON_URL = process.env.STELLAR_HORIZON_URL;
+import { HORIZON_URL } from "../config.js";
+export { HORIZON_URL };
 
 export async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });

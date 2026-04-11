@@ -24,7 +24,9 @@ app.use(helmet());
 
 // Restrict CORS to your frontend origin only
 // Added standard frontend ports for fallback
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || ["http://localhost:5173", "http://localhost:5174"];
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN
+  ? process.env.ALLOWED_ORIGIN.split(",")
+  : ["http://localhost:5173", "http://localhost:5174"];
 app.use(cors({
   origin: ALLOWED_ORIGIN,
   methods: ["GET", "POST"],
@@ -42,7 +44,7 @@ app.post("/api/scan/contract", rateLimitMiddleware(30), contractScanHandler);
 
 app.get("/api/registry/history/:address", historyHandler);
 app.get("/api/registry/flags/:address", flagsHandler);
-app.post("/api/registry/report", rateLimitMiddleware(10), reportHandler);
+app.post("/api/registry/report", requireAdminToken, rateLimitMiddleware(10), reportHandler);
 
 /* ─── Admin Routes (require admin authentication) ───────────────────────── */
 app.post("/api/registry/set-risk", requireAdminToken, setRiskHandler);

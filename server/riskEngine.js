@@ -17,6 +17,23 @@ function parseStellarToml(text) {
   return result;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function asNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function asNonNegative(value, fallback = 0) {
+  return Math.max(0, asNumber(value, fallback));
+}
+
+function asRatio(value, fallback = 0) {
+  return clamp(asNumber(value, fallback), 0, 1);
+}
+
 export async function verifyHomeDomain(homeDomain, accountId) {
   if (!homeDomain) return { homeDomain: null, verified: false, tomlFields: {} };
   const domain = String(homeDomain).trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
@@ -102,131 +119,282 @@ export function analyzeTrustlines(balances) {
   return { qualityScore, flags, nonNativeCount: nonNative.length };
 }
 
-export function computeConfidence({ ageDays, txRecentCount, domainVerified, assetSupply, isAsset }) {
-  const signals = [ageDays != null, txRecentCount != null, domainVerified !== undefined, !isAsset || assetSupply != null];
-  return Math.round((signals.filter(Boolean).length / signals.length) * 100);
+export function normalizeWalletRiskInput(input = {}) {
+  const txTotal = asNonNegative(input?.tx?.total);
+  const networkRisky = asNonNegative(input?.network?.riskyConnections);
+  const networkTotal = Math.max(asNonNegative(input?.network?.totalConnections), networkRisky, 1);
+
+  return {
+    accountAgeDays: asNonNegative(input?.accountAgeDays),
+    tx: {
+      total: txTotal,
+      last24h: asNonNegative(input?.tx?.last24h),
+      perHour: asNonNegative(input?.tx?.perHour),
+    },
+    suspicious: {
+      contractInteractions: asNonNegative(input?.suspicious?.contractInteractions),
+      flaggedTx: asNonNegative(input?.suspicious?.flaggedTx),
+    },
+    network: {
+      riskyConnections: networkRisky,
+      totalConnections: networkTotal,
+    },
+    tokens: {
+      concentration: asRatio(input?.tokens?.concentration),
+      lowTrustExposure: asRatio(input?.tokens?.lowTrustExposure),
+    },
+    time: {
+      recentActivityScore: asRatio(input?.time?.recentActivityScore),
+      recentSuspiciousTx: asNonNegative(input?.time?.recentSuspiciousTx),
+      oldSuspiciousTx: asNonNegative(input?.time?.oldSuspiciousTx),
+    },
+    meta: {
+      dataCompleteness: asRatio(input?.meta?.dataCompleteness, 0.5),
+    },
+  };
 }
 
-function timeWeight(ageInDays) {
-  return Math.exp(-(ageInDays ?? 0) / 30);
+export function getRiskLevel(score) {
+  if (score < 30) return "LOW";
+  if (score < 70) return "MEDIUM";
+  return "HIGH";
+}
+
+function getRiskLabel(level) {
+  if (level === "LOW") return "Low Risk";
+  if (level === "MEDIUM") return "Medium Risk";
+  return "High Risk";
+}
+
+function getRiskColor(level) {
+  if (level === "LOW") return "emerald";
+  if (level === "MEDIUM") return "amber";
+  return "rose";
+}
+
+export function calculateWalletRisk(rawInput) {
+  const data = normalizeWalletRiskInput(rawInput);
+  const contributions = [];
+  const add = (key, label, points, meta = {}) => {
+    if (points <= 0) return;
+    contributions.push({ key, label, baseImpact: points, ...meta });
+  };
+
+  if (data.accountAgeDays < 7) add("account_age", "New wallet age", 15, { value: `${data.accountAgeDays}d` });
+  else if (data.accountAgeDays < 30) add("account_age", "Young wallet age", 8, { value: `${data.accountAgeDays}d` });
+
+  add("suspicious_contracts", "Suspicious contract interactions", Math.min(data.suspicious.contractInteractions * 5, 30), { value: String(data.suspicious.contractInteractions) });
+  add("flagged_transactions", "Flagged transaction volume", Math.min(data.suspicious.flaggedTx * 2, 20), { value: String(data.suspicious.flaggedTx) });
+  add(
+    "tx_frequency",
+    "High transaction frequency",
+    Math.min(data.tx.perHour / 5, 20),
+    { value: `${data.tx.perHour.toFixed(2)}/h` }
+  );
+  add("risky_connections", "Risky wallet connections", Math.min(data.network.riskyConnections * 4, 20), { value: String(data.network.riskyConnections) });
+
+  add(
+    "low_trust_tokens",
+    "Low-trust token exposure",
+    data.tokens.lowTrustExposure * 20,
+    { value: `${(data.tokens.lowTrustExposure * 100).toFixed(1)}%` }
+  );
+  if (data.tokens.concentration > 0.7) {
+    add(
+      "token_concentration",
+      "Token concentration risk",
+      10,
+      { value: `${(data.tokens.concentration * 100).toFixed(1)}%` }
+    );
+  }
+
+  // Interaction effects make manipulation harder and reward multi-signal consistency.
+  add("recent_suspicious", "Recent suspicious activity", data.time.recentSuspiciousTx * 10);
+  add("old_suspicious", "Historical suspicious activity", data.time.oldSuspiciousTx * 3);
+
+  if (data.suspicious.contractInteractions > 0 && data.tx.perHour > 20) add("interaction_contract_tx", "Compounding suspicious + high-frequency behavior", 10);
+  if (data.tokens.lowTrustExposure > 0.6 && data.tokens.concentration > 0.8) {
+    add("interaction_token_stack", "Concentrated low-trust token stack", 8);
+  }
+
+  const baseScore = contributions.reduce((sum, item) => sum + item.baseImpact, 0);
+  const timeMultiplier = 0.6 + data.time.recentActivityScore * 0.4;
+  const weightedContributions = contributions.map((item) => ({
+    ...item,
+    impact: Number((item.baseImpact * timeMultiplier).toFixed(2)),
+  }));
+  const score = clamp(Math.round(baseScore * timeMultiplier), 0, 100);
+  const level = getRiskLevel(score);
+
+  return {
+    data,
+    score,
+    level,
+    baseScore: Number(baseScore.toFixed(2)),
+    timeMultiplier: Number(timeMultiplier.toFixed(3)),
+    contributions: weightedContributions.sort((a, b) => b.impact - a.impact),
+  };
+}
+
+export function explainWalletRisk(rawInput, evaluation) {
+  const data = normalizeWalletRiskInput(rawInput);
+  const assessed = evaluation ?? calculateWalletRisk(data);
+  const reasons = [];
+
+  if (data.accountAgeDays < 7) reasons.push("New wallet (high risk)");
+  else if (data.accountAgeDays < 30) reasons.push("Recently created wallet");
+  if (data.suspicious.contractInteractions > 0) reasons.push("Interacted with suspicious contracts");
+  if (data.suspicious.flaggedTx > 0) reasons.push("Flagged transactions detected");
+  if (data.tx.perHour > 15) reasons.push("High transaction frequency");
+  if (data.network.riskyConnections > 3) reasons.push("Connected to risky wallets");
+  if (data.time.recentSuspiciousTx > 0) reasons.push("Recent suspicious activity elevated");
+  if (data.tokens.lowTrustExposure > 0.5) reasons.push("High exposure to low-trust tokens");
+  if (data.tokens.concentration > 0.7) reasons.push("Token holdings are highly concentrated");
+
+  if (reasons.length > 0) return reasons.slice(0, 5);
+  return assessed.contributions.slice(0, 3).map((c) => c.label);
+}
+
+export function computeConfidence({ walletData, txRecentCount }) {
+  const normalized = normalizeWalletRiskInput(walletData ?? { tx: { total: txRecentCount ?? 0 } });
+  return Math.round(clamp(normalized.meta.dataCompleteness * 100, 0, 100));
+}
+
+function deriveWalletDataFromSignals({
+  ageDays,
+  txRecentCount,
+  domainVerified,
+  trustlinesCount,
+  trustlineQuality,
+  trustlineFlags,
+  txPattern,
+  txFlags,
+  velocity,
+  balances,
+  network,
+  walletData,
+}) {
+  if (walletData) return normalizeWalletRiskInput(walletData);
+
+  const nonNative = (Array.isArray(balances) ? balances : []).filter((b) => b?.asset_type && b.asset_type !== "native");
+  const tokenAmounts = nonNative
+    .map((b) => asNonNegative(b?.balance))
+    .filter((n) => n > 0);
+  const totalTokens = tokenAmounts.reduce((sum, n) => sum + n, 0);
+  const topToken = tokenAmounts.length ? Math.max(...tokenAmounts) : 0;
+  const concentration = totalTokens > 0 ? topToken / totalTokens : 0;
+
+  const uniqueConnections = asNonNegative(network?.unique);
+  const knownVerified = asNonNegative(network?.knownVerified);
+  const inferredRiskyConnections = uniqueConnections > 0
+    ? Math.max(uniqueConnections - knownVerified, 0)
+    : (trustlineFlags?.length ?? 0) + (domainVerified ? 0 : 1);
+  const totalConnections = uniqueConnections > 0 ? uniqueConnections : Math.max(asNonNegative(trustlinesCount), 1);
+
+  const suspiciousContracts = txPattern === "bot_spam" ? 3 : txPattern === "burst" ? 2 : 0;
+  const flaggedTx = (txPattern === "normal" ? 0 : Math.max(1, Math.round(asNonNegative(velocity) * 0.25))) + (txFlags?.length ?? 0);
+
+  return normalizeWalletRiskInput({
+    accountAgeDays: ageDays ?? 365,
+    tx: {
+      total: txRecentCount ?? 0,
+      last24h: velocity ?? 0,
+      perHour: asNonNegative(velocity) / 24,
+    },
+    suspicious: {
+      contractInteractions: suspiciousContracts,
+      flaggedTx,
+    },
+    network: {
+      riskyConnections: inferredRiskyConnections,
+      totalConnections,
+    },
+    tokens: {
+      concentration,
+      lowTrustExposure: 1 - asRatio((trustlineQuality ?? 100) / 100, 1),
+    },
+    time: {
+      recentActivityScore: asRatio(asNonNegative(velocity) / 40),
+      recentSuspiciousTx: asRatio(asNonNegative(velocity) / 40),
+      oldSuspiciousTx: asRatio(asNonNegative((txRecentCount ?? 0) - asNonNegative(velocity)) / 200),
+    },
+    meta: {
+      dataCompleteness: asRatio(
+        [
+          ageDays != null,
+          txRecentCount != null,
+          trustlinesCount != null,
+          domainVerified !== undefined,
+          Array.isArray(balances),
+        ].filter(Boolean).length / 5,
+        0.5
+      ),
+    },
+  });
 }
 
 export function computeRisk({
   ageDays, txRecentCount, trustlinesCount, domainVerified, accountListed,
   flags, isAsset, assetSupply, txPattern, trustlineFlags, trustlineQuality,
-  velocity = 0, prevScore = null,
+  velocity = 0, prevScore = null, balances = [], network = null, walletData = null, txFlags = [],
 }) {
-  let score = 100;
-  const factors = [];
-  const riskFactors = {};
-
-  function penalize(label, base, ageContext = null) {
-    const w = ageContext !== null ? timeWeight(ageContext) : 1;
-    const impact = -Math.round(base * w);
-    factors.push({ label, impact });
-    score += impact;
-    return impact;
-  }
-  function bonus(label, pts) {
-    factors.push({ label, impact: pts });
-    score += pts;
-  }
-
-  if (ageDays != null) {
-    if (ageDays < 14) {
-      penalize("New account (< 14 days)", 30, ageDays);
-      riskFactors.newAccount = true;
-    } else if (ageDays < 90) {
-      penalize("Young account (< 90 days)", 10, ageDays);
-      riskFactors.youngAccount = true;
-    }
-  }
-
-  if (txRecentCount != null) {
-    if (txRecentCount < 5) {
-      penalize("Very low 30-day activity", 20);
-      riskFactors.lowActivity = true;
-    } else if (txRecentCount < 25) {
-      penalize("Below-average 30-day activity", 8);
-    }
-  }
-
-  if (velocity > 50) {
-    penalize("Very high transaction velocity (> 50 tx/24h)", 15, ageDays);
-    riskFactors.highVelocity = true;
-  }
-  if (!domainVerified) {
-    penalize("No verified stellar.toml", 20);
-    riskFactors.noDomain = true;
-  } else if (accountListed) {
-    bonus("Account listed in TOML ACCOUNTS", 8);
-  }
-
-  if (trustlinesCount != null && trustlinesCount === 0 && !isAsset) {
-    penalize("No trustlines established", 6);
-  }
-  if (trustlineFlags?.length > 0) {
-    for (const f of trustlineFlags) {
-      if (f.startsWith("lookalike_asset:")) {
-        const codes = f.split(":")[1];
-        penalize(`Lookalike asset codes: ${codes}`, 20, ageDays);
-        riskFactors.lookalikeAsset = true;
-      }
-    }
-  }
-  if (trustlineQuality != null && trustlineQuality < 50) {
-    penalize("Poor trustline quality", 12);
-    riskFactors.poorTrustlineQuality = true;
-  }
-
-  if (txPattern === "bot_spam") {
-    penalize("Repeated identical activity (bot/spam)", 25, ageDays);
-    riskFactors.suspiciousTxPattern = "bot_spam";
-  } else if (txPattern === "burst") {
-    penalize("Burst activity in short window", 18, ageDays);
-    riskFactors.suspiciousTxPattern = "burst";
-  }
+  const resolvedWalletData = deriveWalletDataFromSignals({
+    ageDays,
+    txRecentCount,
+    domainVerified,
+    trustlinesCount,
+    trustlineQuality,
+    trustlineFlags,
+    txPattern,
+    txFlags,
+    velocity,
+    balances,
+    network,
+    walletData,
+  });
+  const evaluation = calculateWalletRisk(resolvedWalletData);
+  const score = evaluation.score;
+  const level = evaluation.level;
+  const risk = getRiskLabel(level);
+  const color = getRiskColor(level);
+  const factors = evaluation.contributions.map((c) => ({ label: c.label, impact: c.impact }));
+  const reasons = explainWalletRisk(resolvedWalletData, evaluation);
 
   const flagList = Array.isArray(flags) ? flags : [];
-  if (flagList.includes("auth_required")) {
-    penalize("auth_required flag enabled", 6);
-    riskFactors.authRequired = true;
-  }
-  if (flagList.includes("clawback_enabled")) {
-    penalize("Clawback enabled (issuer can take back tokens)", 12);
-    riskFactors.clawbackEnabled = true;
-  }
-  if (flagList.includes("auth_revocable")) {
-    penalize("auth_revocable flag enabled", 4);
-    riskFactors.authRevocable = true;
-  }
+  const riskFactors = {
+    newAccount: resolvedWalletData.accountAgeDays < 30,
+    highVelocity: resolvedWalletData.tx.perHour > 20,
+    suspiciousTxPattern: txPattern !== "normal" ? txPattern : null,
+    noDomain: !domainVerified,
+    lookalikeAsset: (trustlineFlags ?? []).some((f) => f.startsWith("lookalike_asset:")),
+    poorTrustlineQuality: trustlineQuality != null && trustlineQuality < 50,
+    authRequired: flagList.includes("auth_required"),
+    authRevocable: flagList.includes("auth_revocable"),
+    clawbackEnabled: flagList.includes("clawback_enabled"),
+    highSupply: isAsset && typeof assetSupply === "number" && assetSupply > 600_000_000,
+    accountListed: Boolean(accountListed),
+  };
 
-  if (isAsset && typeof assetSupply === "number" && assetSupply > 600_000_000) {
-    penalize("Very high asset supply", 10);
-    riskFactors.highSupply = true;
-  }
-
-  score = Math.min(100, Math.max(0, score))
   let trend = "stable";
   if (prevScore !== null) {
-    if (score < prevScore - 2) trend = "up";
-    else if (score > prevScore + 2) trend = "down";
+    if (score > prevScore + 2) trend = "up";
+    else if (score < prevScore - 2) trend = "down";
   }
 
-  const risk    = score > 70 ? "Low Risk"    : score >= 40 ? "Medium Risk" : "High Risk";
-  const color   = score > 70 ? "emerald"     : score >= 40 ? "amber"       : "rose";
-  const action  = score > 70
+  const action  = level === "LOW"
     ? "Proceed normally. No major red flags detected."
-    : score >= 40
+    : level === "MEDIUM"
       ? "Verify the issuer before interacting. Check their official site and stellar.toml."
       : "Do NOT interact. Multiple high-risk signals detected. Treat as untrusted.";
 
   if (!factors.length) factors.push({ label: "No critical indicators detected", impact: 0 });
-  const reasons = factors.filter((f) => f.impact < 0).map((f) => f.label);
   if (!reasons.length) reasons.push("No critical indicators detected");
 
   return {
-    score, trend, risk, color, reasons, factors, riskFactors, action,
+    score, level, trend, risk, color, reasons, factors, riskFactors, action,
+    walletData: resolvedWalletData,
+    contributions: evaluation.contributions,
+    timeMultiplier: evaluation.timeMultiplier,
     insight: buildInsight(score, riskFactors),
     lastUpdated: Date.now(),
   };
@@ -243,8 +411,8 @@ function buildInsight(score, riskFactors) {
   if (riskFactors.clawbackEnabled) parts.push("The issuer can claw back tokens — your balance could be removed without consent.");
 
   if (!parts.length) {
-    if (score > 70)  return "This entity shows generally healthy signals. Continue monitoring for changes.";
-    if (score >= 40) return "Mixed signals detected. Review domain and activity patterns before interacting.";
+    if (score < 30)  return "This entity shows generally healthy signals. Continue monitoring for changes.";
+    if (score < 70) return "Mixed signals detected. Review domain and activity patterns before interacting.";
     return "Multiple elevated-risk indicators present. Exercise extreme caution.";
   }
   return parts.join(" ");

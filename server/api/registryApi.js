@@ -34,8 +34,8 @@ export async function flagsHandler(req, res) {
 }
 
 export async function reportHandler(req, res) {
-  const { secret, address, reason, severity } = req.body;
-  if (!secret || !address || !reason || severity === undefined) {
+  const { address, reason, severity } = req.body;
+  if (!address || !reason || severity === undefined) {
     return res.status(400).json({ error: "Missing required fields." });
   }
   if (!isValidAddress(address)) {
@@ -49,6 +49,10 @@ export async function reportHandler(req, res) {
     return res.status(400).json({ error: "Severity must be an integer 0-100." });
   }
   try {
+    const secret = process.env.SENTIO_ADMIN_SECRET;
+    if (!secret) {
+      return res.status(500).json({ error: "Server missing admin credentials." });
+    }
     const result = await flagOnchain(secret, address, reason, sev);
     return result.success ? res.json(result) : res.status(400).json(result);
   } catch (err) {

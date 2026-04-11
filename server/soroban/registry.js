@@ -9,9 +9,10 @@ import {
   Account
 } from "@stellar/stellar-sdk";
 
-const RPC_URL = process.env.STELLAR_RPC_URL;
-const HORIZON_URL = process.env.STELLAR_HORIZON_URL;
-const NETWORK_PASSPHRASE = process.env.STELLAR_NETWORK_PASSPHRASE || Networks.TESTNET;
+import { SOROBAN_RPC_URL, SOROBAN_NETWORK_PASSPHRASE, HORIZON_URL } from "../config.js";
+
+const RPC_URL = SOROBAN_RPC_URL;
+const NETWORK_PASSPHRASE = SOROBAN_NETWORK_PASSPHRASE;
 const CONTRACT_ID = process.env.RISK_REGISTRY_CONTRACT_ID;
 const ADMIN_SECRET = process.env.SENTIO_ADMIN_SECRET;
 
@@ -82,7 +83,7 @@ export async function setOnchainRisk(address, payload) {
         nativeToScVal(address, { type: 'address' }),
         nativeToScVal(score, { type: 'u32' }),
         nativeToScVal(confidence, { type: 'u32' }),
-        nativeToScVal(category, { type: 'symbol' })
+        nativeToScVal(category, { type: 'string' })
       ))
       .setTimeout(30)
       .build();
@@ -143,14 +144,14 @@ export async function getOnchainHistory(address) {
   }
 }
 
-export async function flagOnchain(reporterSecret, address, reason, severity) {
+export async function flagOnchain(adminSecret, address, reason, severity) {
   if (!CONTRACT_ID) return { success: false, reason: "No contract configured" };
 
   try {
-    const reporterKp = Keypair.fromSecret(reporterSecret);
+    const adminKp = Keypair.fromSecret(adminSecret);
     const contract = new Contract(CONTRACT_ID);
     
-    const sourceAccount = await loadAccount(reporterKp.publicKey());
+    const sourceAccount = await loadAccount(adminKp.publicKey());
     
     const tx = new TransactionBuilder(sourceAccount, {
       fee: "1000",
@@ -158,9 +159,8 @@ export async function flagOnchain(reporterSecret, address, reason, severity) {
     })
       .addOperation(contract.call(
         "flag",
-        nativeToScVal(reporterKp.publicKey(), { type: 'address' }),
         nativeToScVal(address, { type: 'address' }),
-        nativeToScVal(reason, { type: 'symbol' }),
+        nativeToScVal(reason, { type: 'string' }),
         nativeToScVal(severity, { type: 'u32' })
       ))
       .setTimeout(30)
@@ -173,7 +173,7 @@ export async function flagOnchain(reporterSecret, address, reason, severity) {
     }
 
     const assembledTx = rpc.assembleTransaction(tx, NETWORK_PASSPHRASE, sim).build();
-    assembledTx.sign(reporterKp);
+    assembledTx.sign(adminKp);
 
     const response = await rpcServer.sendTransaction(assembledTx);
     if (response.status === "PENDING" || response.status === "SUCCESS") {

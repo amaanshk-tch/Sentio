@@ -6,15 +6,11 @@ import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet } from "lucide-react";
 import { isConnected, getAddress, setAllowed } from "@stellar/freighter-api";
 import { toast } from "sonner";
 
-// The admin token is set in your .env as VITE_ADMIN_TOKEN (frontend) and
-// SENTIO_ADMIN_TOKEN (server). It is NOT a Stellar secret key — it's just
-// a password that lets you call the protected server endpoints.
 // Generate one with: openssl rand -hex 32
-const ENV_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || "";
 
 export default function Admin() {
-  const [token, setToken] = useState(ENV_TOKEN);
-  const [unlocked, setUnlocked] = useState(Boolean(ENV_TOKEN));
+  const [token, setToken] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
 

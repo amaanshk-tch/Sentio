@@ -1,6 +1,4 @@
 
-const scoreHistory = new Map();
-const MAX_HISTORY = 20;
 
 export function computeContractRisk(data) {
   const {
@@ -83,12 +81,8 @@ export function computeContractRisk(data) {
   score = Math.min(100, Math.max(0, Math.round(score)));
 
   const contractId = data.contractId;
-  const history    = scoreHistory.get(contractId) ?? [];
-  const prevScore  = history.length > 0 ? history[history.length - 1].score : null;
-  const trend      = prevScore === null ? "stable" : score < prevScore - 2 ? "up" : score > prevScore + 2 ? "down" : "stable";
-
-  const newHistory = [...history, { score, ts: Date.now() }].slice(-MAX_HISTORY);
-  scoreHistory.set(contractId, newHistory);
+  const trend      = "stable";
+  const newHistory = [{ score, ts: Date.now() }];
 
   const risk   = score > 70 ? "Low Risk"    : score >= 40 ? "Medium Risk" : "High Risk";
   const color  = score > 70 ? "emerald"     : score >= 40 ? "amber"       : "rose";
