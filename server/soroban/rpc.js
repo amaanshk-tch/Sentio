@@ -45,7 +45,7 @@ export async function getEvents(startLedger, contractId, { signal, limit = 100 }
     "getEvents",
     {
       startLedger,
-      filters: [{ type: "contract", contractIds: [contractId] }],
+      filters: [{ contractIds: [contractId] }],
       pagination: { limit },
     },
     { signal }

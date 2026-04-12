@@ -1,4 +1,3 @@
-
 import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
 import { HORIZON_URL } from "../config.js";
 
@@ -70,17 +69,25 @@ export async function analyzeContract(contractId, { signal } = {}) {
   const latestLedger = await getLatestLedger({ signal });
   const currentLedger = latestLedger?.sequence ?? 0;
 
-  const startLedger = Math.max(0, currentLedger - 4000);
+  // Use a 1-hour window (~720 ledgers) — testnet RPC has short event retention
+  const startLedger = Math.max(1, currentLedger - 720);
+
+  console.log("[analyzer] contractId:", contractId, "startLedger:", startLedger);
 
   const [transactions, events] = await Promise.all([
     getTransactions(startLedger, { signal, limit: 200 }),
-    getEvents(startLedger, contractId, { signal, limit: 100 }),
+    getEvents(startLedger, contractId, { signal, limit: 100 }).catch((e) => {
+      console.warn("[analyzer] getEvents failed:", e.message);
+      return [];
+    }),
   ]);
+
   const contractTxs = transactions.filter((tx) => {
     if (!tx) return false;
     const str = JSON.stringify(tx);
     return str.includes(contractId);
   });
+
   const callerSet = new Set();
   for (const tx of contractTxs) {
     if (tx.sourceAccount) callerSet.add(tx.sourceAccount);

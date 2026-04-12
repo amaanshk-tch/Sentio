@@ -2,7 +2,7 @@ import { analyzeContract } from "../soroban/analyzer.js";
 import { computeContractRisk } from "../soroban/riskEngine.js";
 import { buildInsights, buildSummary, buildRecommendation } from "../soroban/insights.js";
 import { cacheGet, cacheSet } from "../utils/cache.js";
-import { getOnchainRisk, setOnchainRisk } from "../soroban/registry.js";
+// registry not used for contract scans — C... addresses unsupported by Soroban Address type
 
 export async function contractScanHandler(req, res) {
   try {
@@ -19,20 +19,12 @@ export async function contractScanHandler(req, res) {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
-      const onchainRiskPromise = getOnchainRisk(query);
+      // Contract IDs (C...) cannot be stored in the risk registry
+      // which only accepts G... account addresses — skip onchain lookup
+      const onchainData = null;
+
       const data     = await analyzeContract(query, { signal: controller.signal });
       const risk     = computeContractRisk(data);
-      const onchainData = await onchainRiskPromise;
-
-      if (risk.score !== onchainData?.score) {
-        setOnchainRisk(query, {
-          score: risk.score,
-          confidence: risk.confidence,
-          category: risk.risk
-        }).catch((e) => 
-          console.error("[Sentio] On-chain risk logging failed:", e?.message)
-        );
-      }
       const insights = buildInsights(risk.flags);
       const summary  = buildSummary(data, risk);
       const rec      = buildRecommendation(risk.score);
@@ -50,7 +42,7 @@ export async function contractScanHandler(req, res) {
         metadata: {
           ageDays: data.ageDays,
           contractType: data.contractType,
-          deployer: data.deployer,
+          deployer: data.deployer?.deployerAccount ?? null, // string or null
         },
         behavior: {
           invocationCount: data.invocationCount,
@@ -58,7 +50,7 @@ export async function contractScanHandler(req, res) {
           uniqueCallers: data.uniqueCallers,
           dominantCallerRatio: data.dominantCallerRatio,
         },
-        riskBreakdown: risk.factors,
+        riskBreakdown: Object.fromEntries((risk.flags ?? []).map(f => [f, true])),
         events: {
           categories: data.eventCategories,
           raw: data.rawEvents,

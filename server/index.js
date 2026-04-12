@@ -52,5 +52,5 @@ app.post("/api/registry/set-risk", requireAdminToken, setRiskHandler);
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
 /* ─── Start Server ───────────────────────────────────────────────────────── */
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => console.log(`Sentio server running on http://localhost:${PORT}`));
