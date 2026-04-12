@@ -54,9 +54,21 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     { signal }
   ).catch(() => null);
 
-  // Recent operations (for counterparty analysis)
+  // Recent operations (for counterparty analysis + operation-type breakdown)
   const opsPromise = fetchJson(
-    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=20`,
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
+    { signal }
+  ).catch(() => null);
+
+  // DEX open offers
+  const offersPromise = fetchJson(
+    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
+    { signal }
+  ).catch(() => null);
+
+  // Claimable balances
+  const claimablePromise = fetchJson(
+    `${HORIZON_URL}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
     { signal }
   ).catch(() => null);
 
@@ -67,6 +79,8 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     txRecent,
     txOldest,
     opsPayload,
+    offersPayload,
+    claimablePayload,
     onchainData,
     onchainHistory,
     onchainFlags
@@ -77,6 +91,8 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     txRecentPromise,
     txOldestPromise,
     opsPromise,
+    offersPromise,
+    claimablePromise,
     onchainRiskPromise,
     onchainHistoryPromise,
     onchainFlagsPromise
@@ -119,6 +135,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   const ageDays  = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((now - oldestAt) / 86_400_000)) : null;
 
   let counterparties = null;
+  let operationBreakdown = {};
   if (opsPayload) {
     const ops = Array.isArray(opsPayload?._embedded?.records) ? opsPayload._embedded.records : [];
     const counterIds = new Set();
@@ -126,6 +143,9 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
       if (op.to && op.to !== accountId)           counterIds.add(op.to);
       if (op.from && op.from !== accountId)       counterIds.add(op.from);
       if (op.account && op.account !== accountId) counterIds.add(op.account);
+      // Operation-type breakdown
+      const opType = op.type || "unknown";
+      operationBreakdown[opType] = (operationBreakdown[opType] || 0) + 1;
     }
     const total  = ops.length;
     const unique = counterIds.size;
@@ -139,6 +159,25 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
       } catch {}
     }));
     counterparties = { total, unique, knownVerified };
+  }
+
+  // DEX exposure
+  let dexExposure = null;
+  if (offersPayload) {
+    const offers = Array.isArray(offersPayload?._embedded?.records) ? offersPayload._embedded.records : [];
+    const offerAssets = new Set();
+    for (const o of offers) {
+      if (o.selling?.asset_code) offerAssets.add(o.selling.asset_code);
+      if (o.buying?.asset_code) offerAssets.add(o.buying.asset_code);
+    }
+    dexExposure = { openOffers: offers.length, offerAssets: [...offerAssets] };
+  }
+
+  // Claimable balances
+  let claimableBalances = null;
+  if (claimablePayload) {
+    const claims = Array.isArray(claimablePayload?._embedded?.records) ? claimablePayload._embedded.records : [];
+    claimableBalances = { count: claims.length };
   }
 
   const nonNativeBalances = balances.filter((b) => b?.asset_type && b.asset_type !== "native");
@@ -192,11 +231,14 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     },
   };
 
+  const sorobanInvocations = operationBreakdown["invoke_host_function"] || 0;
+
   const riskResult = computeRisk({
     ageDays, txRecentCount, trustlinesCount, domainVerified,
     accountListed: accountListed ?? false, flags, isAsset, assetSupply,
     txPattern, trustlineFlags, trustlineQuality, velocity, prevScore,
     balances, network: counterparties, walletData, txFlags,
+    dexExposure, claimableBalances, sorobanInvocations,
   });
 
   const confidence = computeConfidence({ walletData, txRecentCount });
@@ -226,6 +268,9 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     confidence,
     breakdown,
     counterparties,
+    operationBreakdown,
+    dexExposure,
+    claimableBalances,
     onchainRiskData: onchainData,
     onchainHistory: onchainHistory,
     onchainFlags: onchainFlags,

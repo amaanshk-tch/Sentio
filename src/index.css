@@ -287,6 +287,16 @@
   animation: live-beat 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+@keyframes score-flash {
+  0% { text-shadow: 0 0 0 transparent; }
+  20% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+  100% { text-shadow: 0 0 0 transparent; }
+}
+
+.animate-score-flash {
+  animation: score-flash 0.8s ease-out;
+}
+
 /* ─── Glow Button: flowing border light ─────────────────── */
 @keyframes glow-rotate {
   0% { transform: rotate(0deg); }

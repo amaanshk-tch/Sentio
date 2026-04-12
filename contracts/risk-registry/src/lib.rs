@@ -25,9 +25,16 @@ pub struct Flag {
 // Optimized circular buffer for bounded lists (history and flags)
 #[contracttype]
 #[derive(Clone)]
-pub struct RingBuffer<T> {
+pub struct RiskRingBuffer {
     pub head: u32,
-    pub items: Vec<T>,
+    pub items: Vec<RiskData>,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct FlagRingBuffer {
+    pub head: u32,
+    pub items: Vec<Flag>,
 }
 
 #[contracttype]
@@ -84,11 +91,11 @@ impl RiskRegistry {
         env.storage().persistent().extend_ttl(&risk_key, MIN_TTL, EXTEND_TTL);
 
         let hist_key = DataKey::RiskHistory(addr.clone());
-        let mut rings: RingBuffer<RiskData> = env
+        let mut rings: RiskRingBuffer = env
             .storage()
             .persistent()
             .get(&hist_key)
-            .unwrap_or(RingBuffer {
+            .unwrap_or(RiskRingBuffer {
                 head: 0,
                 items: Vec::new(&env),
             });
@@ -108,22 +115,24 @@ impl RiskRegistry {
     }
 
     pub fn get_risk(env: Env, addr: Address) -> Option<RiskData> {
-        let key = DataKey::Risk(addr);
+        let key = DataKey::Risk(addr.clone());
         if env.storage().persistent().has(&key) {
             env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
             env.storage().persistent().get(&key)
         } else {
+            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "risk"));
             None
         }
     }
 
     pub fn get_history(env: Env, addr: Address) -> Vec<RiskData> {
-        let key = DataKey::RiskHistory(addr);
+        let key = DataKey::RiskHistory(addr.clone());
         if !env.storage().persistent().has(&key) {
+            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "history"));
             return Vec::new(&env);
         }
         env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
-        let rings: RingBuffer<RiskData> = env.storage().persistent().get(&key).unwrap();
+        let rings: RiskRingBuffer = env.storage().persistent().get(&key).unwrap();
         
         let mut ordered = Vec::new(&env);
         if rings.items.len() < 50 {
@@ -149,11 +158,11 @@ impl RiskRegistry {
         let timestamp = env.ledger().timestamp();
         let flag_key = DataKey::Flags(addr.clone());
 
-        let mut rings: RingBuffer<Flag> = env
+        let mut rings: FlagRingBuffer = env
             .storage()
             .persistent()
             .get(&flag_key)
-            .unwrap_or(RingBuffer {
+            .unwrap_or(FlagRingBuffer {
                 head: 0,
                 items: Vec::new(&env),
             });
@@ -179,12 +188,13 @@ impl RiskRegistry {
     }
 
     pub fn get_flags(env: Env, addr: Address) -> Vec<Flag> {
-        let key = DataKey::Flags(addr);
+        let key = DataKey::Flags(addr.clone());
         if !env.storage().persistent().has(&key) {
+            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "flags"));
             return Vec::new(&env);
         }
         env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
-        let rings: RingBuffer<Flag> = env.storage().persistent().get(&key).unwrap();
+        let rings: FlagRingBuffer = env.storage().persistent().get(&key).unwrap();
         
         let mut ordered = Vec::new(&env);
         if rings.items.len() < 50 {

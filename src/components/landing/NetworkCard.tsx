@@ -11,49 +11,59 @@ interface NetworkMetrics {
   avgCloseTime: number;
   status: "Stable" | "Degraded" | "Unknown";
   updatedAt: Date;
+  ledgerCount: number;
 }
 
 async function fetchMetrics(): Promise<NetworkMetrics> {
-  const res = await fetch(`${HORIZON}/ledgers?order=desc&limit=50`);
-  if (!res.ok) throw new Error("Horizon error");
-  const data = await res.json();
+  const sampleRes = await fetch(`${HORIZON}/ledgers?order=desc&limit=200`);
+  if (!sampleRes.ok) throw new Error("Horizon error");
+  const sampleData = await sampleRes.json();
   const ledgers: {
     sequence: number;
     closed_at: string;
     successful_transaction_count: number;
     failed_transaction_count: number;
     operation_count: number;
-  }[] = data._embedded?.records ?? [];
+  }[] = sampleData._embedded?.records ?? [];
 
   if (ledgers.length === 0) throw new Error("No ledger data");
 
-  const latest = ledgers[0];
-  const oldest = ledgers[ledgers.length - 1];
+  const latestSequence = ledgers[0].sequence;
+
+  let ops24h = 0;
+  try {
+    const timestamp24hAgo = Math.floor((Date.now() - 86_400_000) / 1000);
+    const anchorRes = await fetch(`https://api.stellar.expert/explorer/public/ledger/find-by-time?timestamp=${timestamp24hAgo}`);
+    if (!anchorRes.ok) throw new Error("Stellar Expert error");
+    const { sequence: anchorSequence } = await anchorRes.json();
+    
+    const totalLedgers = latestSequence - anchorSequence;
+    const avgOps = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
+    ops24h = Math.round(avgOps * totalLedgers);
+  } catch (err) {
+    const avgCloseTimeFallback = 5;
+    const avgOpsFallback = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
+    ops24h = Math.round(avgOpsFallback * ((24 * 3600) / avgCloseTimeFallback));
+  }
+
+  const latestTs = new Date(ledgers[0].closed_at).getTime();
+  const oldestTs = new Date(ledgers[ledgers.length - 1].closed_at).getTime();
+  const avgCloseTime = ledgers.length > 1 ? (latestTs - oldestTs) / (ledgers.length - 1) / 1000 : 5;
 
   const totalSuccess = ledgers.reduce((s, l) => s + l.successful_transaction_count, 0);
-  const totalFailed = ledgers.reduce((s, l) => s + l.failed_transaction_count, 0);
-  const totalTx = totalSuccess + totalFailed;
+  const totalTx = totalSuccess + ledgers.reduce((s, l) => s + l.failed_transaction_count, 0);
   const txSuccessPct = totalTx > 0 ? Math.round((totalSuccess / totalTx) * 100) : 100;
 
-  const latestTs = new Date(latest.closed_at).getTime();
-  const oldestTs = new Date(oldest.closed_at).getTime();
-  const spanMs = latestTs - oldestTs;
-  const avgCloseTime = ledgers.length > 1 ? spanMs / (ledgers.length - 1) / 1000 : 5;
-
-  const opsPerLedger = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
-  const ledgersPerDay = (24 * 3600) / avgCloseTime;
-  const ops24h = Math.round(opsPerLedger * ledgersPerDay);
-
-  const status: NetworkMetrics["status"] =
-    avgCloseTime < 8 ? "Stable" : avgCloseTime < 15 ? "Degraded" : "Unknown";
+  const status: NetworkMetrics["status"] = avgCloseTime < 8 ? "Stable" : avgCloseTime < 15 ? "Degraded" : "Unknown";
 
   return {
-    ledger: latest.sequence,
+    ledger: latestSequence,
     txSuccessPct,
     ops24h,
     avgCloseTime: Math.round(avgCloseTime * 10) / 10,
     status,
     updatedAt: new Date(),
+    ledgerCount: ledgers.length,
   };
 }
 
@@ -92,7 +102,7 @@ function useCountUp(target: number | null, duration = 900) {
 }
 
 
-const REFRESH_INTERVAL = 10;
+const REFRESH_INTERVAL = 120;
 
 function CountdownRing({ onRefresh }: { onRefresh: () => void }) {
   return (
@@ -204,24 +214,44 @@ export function NetworkCard() {
   const [error, setError] = useState(false);
   const [tick, setTick] = useState(0);
 
+  const loadingRef = useRef(false);
+
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
-    setError(false);
+    
     try {
       const m = await fetchMetrics();
       setMetrics(m);
+      setError(false);
     } catch {
       setError(true);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }, []);
 
   useEffect(() => { load(); }, [tick, load]);
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), REFRESH_INTERVAL * 1000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      setTick(t => t + 1);
+    }, REFRESH_INTERVAL * 1000);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        setTick(t => t + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const refresh = useCallback(() => setTick(t => t + 1), []);
@@ -275,13 +305,13 @@ export function NetworkCard() {
           <StatTile
             label="Transaction Success"
             value={metrics ? `${metrics.txSuccessPct}%` : null}
-            sub="last 50 ledgers"
+            sub={metrics ? `last ${metrics.ledgerCount} ledgers` : "computing..."}
             loading={loading && metrics === null}
           />
           <StatTile
-            label="24H Operations"
+            label="Ops/Day (est.)"
             value={metrics ? fmtLarge(metrics.ops24h) : null}
-            sub="extrapolated from live data"
+            sub="based on actual 24h ledger span"
             loading={loading && metrics === null}
           />
           <StatusTile status={metrics?.status ?? null} />

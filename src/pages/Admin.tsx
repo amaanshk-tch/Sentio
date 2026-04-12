@@ -67,7 +67,7 @@ export default function Admin() {
         toast.success(`Risk set! Hash: ${data.hash}`);
         setRiskAddress("");
       } else if (res.status === 401) {
-        toast.error("Invalid admin token. Check your VITE_ADMIN_TOKEN.");
+        toast.error("Invalid admin token.");
       } else {
         toast.error(`Error: ${data.error || data.reason}`);
       }
@@ -95,7 +95,7 @@ export default function Admin() {
         toast.success(`Flagged! Hash: ${data.hash}`);
         setFlagAddress("");
       } else if (res.status === 401) {
-        toast.error("Invalid admin token. Check your VITE_ADMIN_TOKEN.");
+        toast.error("Invalid admin token.");
       } else {
         toast.error(`Error: ${data.error || data.reason}`);
       }

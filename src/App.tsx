@@ -10,8 +10,7 @@ import Admin from "./pages/Admin";
 
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
-// Deployed Soroban RiskRegistry Contract ID (from .env)
-export const RISK_REGISTRY_CONTRACT_ID = import.meta.env.VITE_RISK_REGISTRY_CONTRACT_ID || "";
+// No direct frontend Soroban contract calls; everything routes through /api/registry
 
 const queryClient = new QueryClient();
 

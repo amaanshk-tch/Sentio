@@ -134,7 +134,7 @@ export async function getOnchainHistory(address) {
           confidence: Number(item.confidence),
           category: item.category ? item.category.toString() : "",
           last_updated: Number(item.last_updated) * 1000 
-        })).reverse();
+        })).reverse(); // Contract returns oldest->newest (chronological). We reverse for UI (newest first).
       }
     }
     return [];
@@ -207,11 +207,10 @@ export async function getOnchainFlags(address) {
       const val = scValToNative(sim.result.retval);
       if (Array.isArray(val)) {
         return val.map(item => ({
-          reporter: item.reporter,
           reason: item.reason ? item.reason.toString() : "",
           severity: Number(item.severity),
           timestamp: Number(item.timestamp) * 1000 
-        })).reverse();
+        })).reverse(); // Contract returns oldest->newest. Reverse for UI rendering.
       }
     }
     return [];

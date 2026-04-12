@@ -151,6 +151,15 @@ export function normalizeWalletRiskInput(input = {}) {
     meta: {
       dataCompleteness: asRatio(input?.meta?.dataCompleteness, 0.5),
     },
+    dex: {
+      openOffers: asNonNegative(input?.dex?.openOffers),
+    },
+    claimable: {
+      count: asNonNegative(input?.claimable?.count),
+    },
+    soroban: {
+      invocations: asNonNegative(input?.soroban?.invocations),
+    },
   };
 }
 
@@ -217,6 +226,18 @@ export function calculateWalletRisk(rawInput) {
     add("interaction_token_stack", "Concentrated low-trust token stack", 8);
   }
 
+  // DEX exposure signals
+  if (data.dex?.openOffers > 10) add("dex_heavy", "Heavy DEX activity (many open offers)", 8, { value: `${data.dex.openOffers} offers` });
+  else if (data.dex?.openOffers > 5) add("dex_active", "Active DEX trading", 4, { value: `${data.dex.openOffers} offers` });
+
+  // Claimable balance / airdrop farming
+  if (data.claimable?.count >= 8) add("airdrop_farming", "Potential airdrop farming behavior", 10, { value: `${data.claimable.count} claimable` });
+  else if (data.claimable?.count >= 4) add("claimable_activity", "Notable claimable balance activity", 5, { value: `${data.claimable.count} claimable` });
+
+  // Soroban contract invocations
+  if (data.soroban?.invocations > 10) add("soroban_heavy", "Heavy Soroban contract invocations", 12, { value: `${data.soroban.invocations} invocations` });
+  else if (data.soroban?.invocations > 3) add("soroban_active", "Active Soroban contract usage", 5, { value: `${data.soroban.invocations} invocations` });
+
   const baseScore = contributions.reduce((sum, item) => sum + item.baseImpact, 0);
   const timeMultiplier = 0.6 + data.time.recentActivityScore * 0.4;
   const weightedContributions = contributions.map((item) => ({
@@ -273,6 +294,9 @@ function deriveWalletDataFromSignals({
   balances,
   network,
   walletData,
+  dexExposure,
+  claimableBalances,
+  sorobanInvocations,
 }) {
   if (walletData) return normalizeWalletRiskInput(walletData);
 
@@ -330,6 +354,15 @@ function deriveWalletDataFromSignals({
         0.5
       ),
     },
+    dex: {
+      openOffers: asNonNegative(dexExposure?.openOffers),
+    },
+    claimable: {
+      count: asNonNegative(claimableBalances?.count),
+    },
+    soroban: {
+      invocations: asNonNegative(sorobanInvocations),
+    },
   });
 }
 
@@ -337,6 +370,7 @@ export function computeRisk({
   ageDays, txRecentCount, trustlinesCount, domainVerified, accountListed,
   flags, isAsset, assetSupply, txPattern, trustlineFlags, trustlineQuality,
   velocity = 0, prevScore = null, balances = [], network = null, walletData = null, txFlags = [],
+  dexExposure = null, claimableBalances = null, sorobanInvocations = 0,
 }) {
   const resolvedWalletData = deriveWalletDataFromSignals({
     ageDays,
@@ -351,6 +385,9 @@ export function computeRisk({
     balances,
     network,
     walletData,
+    dexExposure,
+    claimableBalances,
+    sorobanInvocations,
   });
   const evaluation = calculateWalletRisk(resolvedWalletData);
   const score = evaluation.score;

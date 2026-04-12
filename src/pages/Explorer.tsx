@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, ArrowLeft, Shield, AlertTriangle, Clock, Globe,
   Layers, Key, Coins, Users, TrendingUp, ExternalLink,
-  Copy, Check, RefreshCw, AlertCircle, Info, Activity, Wifi, WifiOff, FileCode
+  Copy, Check, RefreshCw, AlertCircle, Info, Activity, Wifi, WifiOff, FileCode,
+  ArrowUpRight, ArrowDownRight, Minus, Share2, BarChart3, Gift
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "@/components/landing/BrandMark";
@@ -23,7 +24,6 @@ export interface OnchainRisk {
 }
 
 export interface OnchainFlag {
-  reporter: string;
   reason: string;
   severity: number;
   timestamp: number;
@@ -72,6 +72,10 @@ interface ScanResult {
   riskFactors?: ScanRiskFactors;
   insight?: string;
   lastUpdated?: number;
+  counterparties?: { total: number; unique: number; knownVerified: number } | null;
+  operationBreakdown?: Record<string, number>;
+  dexExposure?: { openOffers: number; offerAssets: string[] } | null;
+  claimableBalances?: { count: number } | null;
 }
 
 interface ContractScanResult {
@@ -302,7 +306,7 @@ function RiskFactorPills({ riskFactors }: { riskFactors: ScanRiskFactors }) {
   );
 }
 
-function EngineRiskCard({ scan }: { scan: ScanResult | null }) {
+function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: boolean }) {
   if (!scan) return null;
   const { label, color, bg, border } = deriveRiskLabel(scan.score);
   const topContribs = (scan.contributions ?? []).slice(0, 5);
@@ -317,21 +321,47 @@ function EngineRiskCard({ scan }: { scan: ScanResult | null }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-sentio-text-muted mb-1">Risk Engine Analysis</p>
-          <p className={`text-4xl font-bold tabular-nums ${color}`}>
-            {scan.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
-          </p>
+          <div className="flex items-end gap-2">
+            <p key={scan.score} className={`text-4xl font-bold tabular-nums ${color} ${isLive ? "animate-score-flash" : ""}`}>
+              {scan.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
+            </p>
+            {/* Trend arrow */}
+            {scan.trend && scan.trend !== "stable" && (
+              <span className={`flex items-center gap-0.5 text-sm font-bold mb-1 ${
+                scan.trend === "up" ? "text-sentio-danger" : "text-sentio-success"
+              }`}>
+                {scan.trend === "up"
+                  ? <ArrowUpRight className="h-4 w-4" />
+                  : <ArrowDownRight className="h-4 w-4" />
+                }
+                {scan.trend === "up" ? "Rising" : "Falling"}
+              </span>
+            )}
+            {scan.trend === "stable" && (
+              <span className="flex items-center gap-0.5 text-sm font-bold mb-1 text-sentio-text-muted">
+                <Minus className="h-4 w-4" /> Stable
+              </span>
+            )}
+          </div>
           <p className={`mt-1 text-sm font-semibold ${color}`}>{label}</p>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-2">
           <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-bold ${levelBadge(scan.level)}`}>
             {scan.level ?? scan.risk}
           </span>
-          <p className="text-xs text-sentio-text-muted mt-2">Confidence: {scan.confidence}%</p>
+          <p className="text-xs text-sentio-text-muted">Confidence: {scan.confidence}%</p>
           {scan.lastUpdated && (
-            <p className="text-xs text-sentio-text-muted mt-0.5">
+            <p className="text-xs text-sentio-text-muted">
               Updated {timeAgo(new Date(scan.lastUpdated).toISOString())}
             </p>
           )}
+          {/* Share / copy link */}
+          <button
+            onClick={() => { navigator.clipboard.writeText(window.location.href); }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-sentio-surface/50 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-sentio-text-muted hover:text-foreground hover:bg-white/5 transition-colors"
+          >
+            <Share2 className="h-3 w-3" /> Share
+          </button>
         </div>
       </div>
 
@@ -555,8 +585,7 @@ function OnchainFlagsCard({ flags }: { flags: OnchainFlag[] }) {
                 Severity: {flag.severity}/100
               </span>
             </div>
-            <div className="text-xs flex justify-between text-sentio-text-muted mt-2 border-t border-white/5 pt-2">
-              <span className="font-mono">Reporter: {shortAddress(flag.reporter)}</span>
+            <div className="text-xs flex justify-end text-sentio-text-muted mt-2 border-t border-white/5 pt-2">
               <span>{timeAgo(new Date(flag.timestamp).toISOString())}</span>
             </div>
           </div>
@@ -610,15 +639,16 @@ interface AccountPanelProps {
   onchainHistory: OnchainRisk[];
   onchainFlags: OnchainFlag[];
   scanResult: ScanResult | null;
+  isLive?: boolean;
 }
 
-function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanResult }: AccountPanelProps) {
+function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanResult, isLive }: AccountPanelProps) {
   const xlmBal = account.balances.find(b => b.asset_type === "native");
   const tokens = account.balances.filter(b => b.asset_type !== "native" && b.asset_type !== "liquidity_pool_shares");
 
   return (
     <div className="space-y-4">
-      <EngineRiskCard scan={scanResult} />
+      <EngineRiskCard scan={scanResult} isLive={isLive} />
       {scanResult?.breakdown && <ScanBreakdownCard breakdown={scanResult.breakdown} />}
       <RiskScoreCard onchainHistory={onchainHistory} />
       <FlagBanner flags={onchainFlags} />
@@ -846,6 +876,139 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Counterparties + Operation Breakdown */}
+      {scanResult && (scanResult.counterparties || scanResult.operationBreakdown) && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* Counterparty viewer */}
+          {scanResult.counterparties && (
+            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+                <Users className="h-4 w-4" /> Counterparty Analysis
+              </h3>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: "Total", value: scanResult.counterparties.total },
+                  { label: "Unique", value: scanResult.counterparties.unique },
+                  { label: "Verified", value: scanResult.counterparties.knownVerified },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-xl border border-foreground/6 bg-sentio-surface/50 p-3 text-center">
+                    <p className="text-[0.6rem] font-bold uppercase tracking-widest text-sentio-text-muted">{label}</p>
+                    <p className="text-xl font-bold text-foreground mt-1">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {scanResult.counterparties.unique > 0 && (
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-sentio-text-muted">Verified ratio</span>
+                    <span className="font-mono text-foreground">
+                      {Math.round((scanResult.counterparties.knownVerified / scanResult.counterparties.unique) * 100)}%
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10">
+                    <div
+                      className="h-2 rounded-full bg-sentio-success"
+                      style={{ width: `${Math.round((scanResult.counterparties.knownVerified / scanResult.counterparties.unique) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Operation-type breakdown */}
+          {scanResult.operationBreakdown && Object.keys(scanResult.operationBreakdown).length > 0 && (
+            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" /> Operation Types
+              </h3>
+              <div className="space-y-2.5">
+                {Object.entries(scanResult.operationBreakdown)
+                  .sort(([,a], [,b]) => b - a)
+                  .map(([type, count]) => {
+                    const total = Object.values(scanResult.operationBreakdown!).reduce((s, v) => s + v, 0);
+                    const pct = Math.round((count / total) * 100);
+                    const isSoroban = type === "invoke_host_function";
+                    return (
+                      <div key={type}>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <span className={`capitalize ${isSoroban ? "text-sentio-warning font-semibold" : "text-sentio-text-secondary"}`}>
+                            {type.replace(/_/g, " ")}
+                            {isSoroban && " \u26a1"}
+                          </span>
+                          <span className="font-mono text-foreground">{count} ({pct}%)</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-white/10">
+                          <div
+                            className={`h-1.5 rounded-full ${isSoroban ? "bg-sentio-warning" : "bg-primary"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* DEX Exposure + Claimable Balances */}
+      {scanResult && (scanResult.dexExposure || scanResult.claimableBalances) && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* DEX exposure */}
+          {scanResult.dexExposure && (
+            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" /> DEX Exposure
+              </h3>
+              <div className="flex items-end gap-3 mb-4">
+                <p className="text-3xl font-bold tabular-nums text-foreground">
+                  {scanResult.dexExposure.openOffers}
+                </p>
+                <p className="text-sm text-sentio-text-muted mb-1">open offers</p>
+              </div>
+              {scanResult.dexExposure.offerAssets.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {scanResult.dexExposure.offerAssets.map((asset) => (
+                    <span key={asset} className="inline-flex rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-primary">
+                      {asset}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {scanResult.dexExposure.openOffers === 0 && (
+                <p className="text-sm text-sentio-text-muted">No open DEX offers detected.</p>
+              )}
+            </div>
+          )}
+
+          {/* Claimable balances */}
+          {scanResult.claimableBalances && (
+            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
+                <Gift className="h-4 w-4" /> Claimable Balances
+              </h3>
+              <div className="flex items-end gap-3">
+                <p className="text-3xl font-bold tabular-nums text-foreground">
+                  {scanResult.claimableBalances.count}
+                </p>
+                <p className="text-sm text-sentio-text-muted mb-1">pending claims</p>
+              </div>
+              {scanResult.claimableBalances.count >= 8 && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-sentio-warning/20 bg-sentio-warning/8 px-3 py-2">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sentio-warning" />
+                  <p className="text-xs text-sentio-warning">High claimable balance count may indicate airdrop farming behavior.</p>
+                </div>
+              )}
+              {scanResult.claimableBalances.count === 0 && (
+                <p className="text-sm text-sentio-text-muted mt-2">No pending claimable balances.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1183,7 +1346,7 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
 type SearchState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error"; message: string; isRateLimit?: boolean; retryAfter?: number }
   | {
       status: "done";
       mode: "account" | "asset" | "contract";
@@ -1221,6 +1384,11 @@ export default function Explorer() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contractId: trimmed }),
         });
+        if (res.status === 429) {
+          const ra = parseInt(res.headers.get("Retry-After") || "60", 10);
+          setState({ status: "error", message: "Too many requests", isRateLimit: true, retryAfter: ra });
+          return;
+        }
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Contract scan failed." }));
           throw new Error(err.error ?? "Contract scan failed.");
@@ -1258,14 +1426,24 @@ export default function Explorer() {
 
       if (addressToFetch) {
         try {
+          const scanReq = await fetch("/api/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: trimmed }),
+          });
+
+          if (scanReq.status === 429) {
+            const ra = parseInt(scanReq.headers.get("Retry-After") || "60", 10);
+            setState({ status: "error", message: "Too many requests", isRateLimit: true, retryAfter: ra });
+            return;
+          }
+
+          const scanResPromise = scanReq.ok ? scanReq.json() : null;
+
           const [histRes, flagsRes, scanRes, ledgerRes] = await Promise.all([
             fetch(`/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
             fetch(`/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] }),
-            fetch("/api/scan", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: trimmed }),
-            }).then(r => r.ok ? r.json() : null),
+            scanResPromise,
             fetchLatestLedger(),
           ]);
           onchainHistory = histRes.history || [];
@@ -1405,25 +1583,33 @@ export default function Explorer() {
       {/* Results & Errors */}
       <AnimatePresence mode="wait">
         {state.status === "error" && (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mb-8 mx-auto max-w-2xl flex items-start gap-4 rounded-2xl border border-sentio-danger/30 bg-sentio-danger/10 p-5 shadow-sentio-md"
-          >
-            <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-sentio-danger" />
-            <div className="flex-1">
-              <p className="text-base font-bold text-sentio-danger">Search failed</p>
-              <p className="mt-1 text-sm text-sentio-danger/90">{state.message}</p>
-            </div>
-            <button
-              onClick={reset}
-              className="text-xs font-semibold uppercase tracking-wider text-sentio-text-muted hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
+          state.isRateLimit ? (
+            <RateLimitCountdown 
+              key="ratelimit"
+              retryAfter={state.retryAfter ?? 60} 
+              onDismiss={reset} 
+            />
+          ) : (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mb-8 mx-auto max-w-2xl flex items-start gap-4 rounded-2xl border border-sentio-danger/30 bg-sentio-danger/10 p-5 shadow-sentio-md"
             >
-              Dismiss
-            </button>
-          </motion.div>
+              <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-sentio-danger" />
+              <div className="flex-1">
+                <p className="text-base font-bold text-sentio-danger">Search failed</p>
+                <p className="mt-1 text-sm text-sentio-danger/90">{state.message}</p>
+              </div>
+              <button
+                onClick={reset}
+                className="text-xs font-semibold uppercase tracking-wider text-sentio-text-muted hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
+              >
+                Dismiss
+              </button>
+            </motion.div>
+          )
         )}
 
         {isLoading && (
@@ -1503,6 +1689,7 @@ export default function Explorer() {
                 onchainHistory={state.onchainHistory}
                 onchainFlags={state.onchainFlags}
                 scanResult={state.scanResult}
+                isLive={streamStatus === "live"}
               />
             )}
             {state.mode === "asset" && state.asset && (
@@ -1520,5 +1707,39 @@ export default function Explorer() {
         )}
       </AnimatePresence>
     </PageLayout>
+  );
+}
+
+function RateLimitCountdown({ retryAfter, onDismiss }: { retryAfter: number; onDismiss: () => void }) {
+  const [timeLeft, setTimeLeft] = useState(retryAfter);
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const timer = setInterval(() => setTimeLeft((p) => Math.max(0, p - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  return (
+    <motion.div
+      key="error"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      className="mb-8 mx-auto max-w-2xl flex items-start gap-4 rounded-2xl border border-sentio-warning/30 bg-sentio-warning/10 p-5 shadow-sentio-md"
+    >
+      <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-sentio-warning" />
+      <div className="flex-1">
+        <p className="text-base font-bold text-sentio-warning">Too many requests</p>
+        <p className="mt-1 text-sm text-sentio-warning/90">
+          {timeLeft > 0 ? `Please wait ${timeLeft}s before trying again.` : "You can try searching again."}
+        </p>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="text-xs font-semibold uppercase tracking-wider text-sentio-warning hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
+      >
+        Dismiss
+      </button>
+    </motion.div>
   );
 }
