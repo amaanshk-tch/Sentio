@@ -41,8 +41,8 @@ export default function Admin() {
         setWalletVerified(false);
         toast.error(result.error ?? "Not authorized. This wallet is not the contract admin.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to connect wallet.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to connect wallet.");
     }
   };
 
@@ -65,8 +65,8 @@ export default function Admin() {
       const submitData = await submitRes.json();
       if (!submitRes.ok) throw new Error(submitData.error ?? "Submit failed.");
       return { hash: submitData.hash };
-    } catch (err: any) {
-      throw new Error(err.message || "Transaction failed.");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Transaction failed.");
     }
   };
 
@@ -104,8 +104,8 @@ export default function Admin() {
         toast.success(`Risk set! Hash: ${submitted.hash}`);
         setRiskAddress("");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to set risk.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to set risk.");
     } finally {
       setIsSettingRisk(false);
     }
@@ -143,8 +143,8 @@ export default function Admin() {
         toast.success(`Flagged! Hash: ${submitted.hash}`);
         setFlagAddress("");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to flag.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to flag.");
     } finally {
       setIsFlagging(false);
     }

@@ -70,8 +70,8 @@ function useCountUp(target: number | null, duration = 900) {
 
   useEffect(() => {
     if (target === null) {
-      setVal(null);
-      return;
+      const raf = requestAnimationFrame(() => setVal(null));
+      return () => cancelAnimationFrame(raf);
     }
     const from = prevRef.current;
     prevRef.current = target;

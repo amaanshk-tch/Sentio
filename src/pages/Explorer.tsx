@@ -121,7 +121,6 @@ function useLiveStream(
     wsRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("idle");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLastTxId(null);
 
     if (!accountId) return;
