@@ -12,7 +12,6 @@ export default function Admin() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletVerified, setWalletVerified] = useState(false);
 
-  // ── Gate 1: connect + verify wallet is the contract admin ──────────────────
   const handleConnect = async () => {
     try {
       if (!await isConnected()) {
@@ -26,7 +25,6 @@ export default function Admin() {
 
       setWalletAddress(data.address);
 
-      // Verify with server that this wallet is the contract admin
       const res = await fetch("/api/registry/verify-admin", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -51,7 +49,6 @@ export default function Admin() {
     setWalletVerified(false);
   };
 
-  // ── Shared: sign XDR with Freighter then submit ────────────────────────────
   const signAndSubmit = async (unsignedXdr: string): Promise<{ hash: string } | null> => {
     try {
       const result = await signTransaction(unsignedXdr, { networkPassphrase: "Test SDF Network ; September 2015" });
@@ -70,7 +67,6 @@ export default function Admin() {
     }
   };
 
-  // ── Set Risk ───────────────────────────────────────────────────────────────
   const [riskAddress, setRiskAddress]       = useState("");
   const [riskScore, setRiskScore]           = useState(0);
   const [riskConfidence, setRiskConfidence] = useState(50);
@@ -82,7 +78,6 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsSettingRisk(true);
     try {
-      // Step 1 — get unsigned XDR from server
       const res = await fetch("/api/registry/set-risk", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -98,7 +93,6 @@ export default function Admin() {
         return;
       }
 
-      // Step 2 — Freighter signs, server submits
       const submitted = await signAndSubmit(data.unsignedXdr);
       if (submitted) {
         toast.success(`Risk set! Hash: ${submitted.hash}`);
@@ -111,7 +105,6 @@ export default function Admin() {
     }
   };
 
-  // ── Flag Address ───────────────────────────────────────────────────────────
   const [flagAddress, setFlagAddress]   = useState("");
   const [flagReason, setFlagReason]     = useState("suspicious");
   const [flagSeverity, setFlagSeverity] = useState(50);
@@ -122,7 +115,6 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsFlagging(true);
     try {
-      // Step 1 — get unsigned XDR from server
       const res = await fetch("/api/registry/report", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -137,7 +129,6 @@ export default function Admin() {
         return;
       }
 
-      // Step 2 — Freighter signs, server submits
       const submitted = await signAndSubmit(data.unsignedXdr);
       if (submitted) {
         toast.success(`Flagged! Hash: ${submitted.hash}`);
@@ -196,7 +187,6 @@ export default function Admin() {
         </p>
       </div>
 
-      {/* Gate 1 — Admin token */}
       {!unlocked ? (
         <div className="mb-8 p-6 rounded-2xl border border-foreground/8 bg-sentio-elevated/80 w-full max-w-md">
           <div className="flex items-center gap-2 mb-4">

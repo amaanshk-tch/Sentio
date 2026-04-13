@@ -1,8 +1,6 @@
 
 const HORIZON = "https://horizon.stellar.org";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export interface HorizonAccount {
   id: string;
   account_id: string;
@@ -103,14 +101,12 @@ function isAccountId(input: string): boolean {
   return /^G[A-Z2-7]{55}$/.test(input.trim());
 }
 
-// Asset input: "USDC:GXXXXXX" or "CODE" or just a G... (account)
 function parseAssetInput(input: string): { code: string; issuer?: string } | null {
   const trimmed = input.trim();
   if (trimmed.includes(":")) {
     const [code, issuer] = trimmed.split(":");
     return { code: code.toUpperCase(), issuer };
   }
-  // bare code, no issuer
   if (/^[A-Z0-9]{1,12}$/.test(trimmed.toUpperCase()) && !isAccountId(trimmed)) {
     return { code: trimmed.toUpperCase() };
   }

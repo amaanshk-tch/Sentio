@@ -42,7 +42,6 @@ export function FlowingPaths() {
 
     const d = `M${points[0]} ${points.slice(1).map((p) => `L${p}`).join(" ")}`;
     const opacity = 0.03 + (Math.sin(i * 0.5) + 1) * 0.04;
-    // eslint-disable-next-line react-hooks/purity
     const strokeWidth = 0.08 + Math.random() * 0.12;
 
     return (

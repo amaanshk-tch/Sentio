@@ -38,7 +38,6 @@ async function fetchMetrics(): Promise<NetworkMetrics> {
   const totalTx = totalSuccess + totalFailed;
   const txSuccessPct = totalTx > 0 ? Math.round((totalSuccess / totalTx) * 100) : 100;
 
-  // Estimate 24h ops from actual close time — no third-party API needed
   const opsPerLedger = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
   const ledgersPerDay = (24 * 3600) / Math.max(avgCloseTime, 1);
   const ops24h = Math.round(opsPerLedger * ledgersPerDay);
@@ -263,10 +262,7 @@ export function NetworkCard() {
         </div>
 
         <div className="mb-4">
-          <p className="text-sm font-semibold text-foreground">Is Stellar running normally?</p>
-          <p className="text-[0.65rem] text-sentio-text-muted">
-            Check network health before you search an address.
-          </p>
+          <p className="text-sm font-semibold text-foreground">Check network health before you search an address.</p>
         </div>
 
         {error && !loading && (
