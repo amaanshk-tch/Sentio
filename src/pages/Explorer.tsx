@@ -111,7 +111,9 @@ function useLiveStream(
   const [status, setStatus]   = useState<StreamStatus>("idle");
   const [lastTxId, setLastTxId] = useState<string | null>(null);
   const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
 
   useEffect(() => {
     // close any previous socket
