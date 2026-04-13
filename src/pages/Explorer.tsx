@@ -119,7 +119,9 @@ function useLiveStream(
     // close any previous socket
     wsRef.current?.close();
     wsRef.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("idle");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLastTxId(null);
 
     if (!accountId) return;
