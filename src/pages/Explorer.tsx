@@ -135,13 +135,14 @@ function useLiveStream(
       try {
         const msg = JSON.parse(ev.data as string);
         if (msg.type === "update") {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { type: _t, newTx, ...scanPatch } = msg;
           if (newTx?.id) setLastTxId(newTx.id as string);
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
         } else if (msg.type === "stream_stopped") {
           setStatus("stopped");
         }
-      } catch {}
+      } catch { /* ignore */ }
     };
 
     ws.onerror  = () => setStatus("stopped");
@@ -152,7 +153,6 @@ function useLiveStream(
       ws.close();
       wsRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
   return { status, lastTxId };

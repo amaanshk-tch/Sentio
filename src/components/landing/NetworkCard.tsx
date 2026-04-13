@@ -40,7 +40,7 @@ async function fetchMetrics(): Promise<NetworkMetrics> {
     const totalLedgers = latestSequence - anchorSequence;
     const avgOps = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
     ops24h = Math.round(avgOps * totalLedgers);
-  } catch (err) {
+  } catch {
     const avgCloseTimeFallback = 5;
     const avgOpsFallback = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
     ops24h = Math.round(avgOpsFallback * ((24 * 3600) / avgCloseTimeFallback));

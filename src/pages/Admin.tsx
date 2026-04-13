@@ -29,8 +29,8 @@ export default function Admin() {
         setWalletAddress(data.address);
         toast.success("Wallet connected!");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to connect wallet.");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to connect wallet.");
     }
   };
 
@@ -71,8 +71,8 @@ export default function Admin() {
       } else {
         toast.error(`Error: ${data.error || data.reason}`);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to set risk.");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to set risk.");
     } finally {
       setIsSettingRisk(false);
     }
@@ -99,8 +99,8 @@ export default function Admin() {
       } else {
         toast.error(`Error: ${data.error || data.reason}`);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to flag.");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to flag.");
     } finally {
       setIsFlagging(false);
     }
