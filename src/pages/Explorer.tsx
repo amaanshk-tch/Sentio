@@ -1174,7 +1174,18 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
 // ─── Contract Panel ────────────────────────────────────────────────────────────
 
 function ContractPanel({ result }: { result: ContractScanResult }) {
-  const { label, color, bg, border } = deriveRiskLabel(result.score);
+  // Contract score is INVERTED — 100 = safe, 0 = critical
+  // Use server-provided risk label directly, not deriveRiskLabel
+  const contractRiskStyle = {
+    "Low Risk":    { color: "text-sentio-success",  bg: "bg-sentio-success/10",  border: "border-sentio-success/30" },
+    "Medium Risk": { color: "text-sentio-warning",  bg: "bg-sentio-warning/10",  border: "border-sentio-warning/30" },
+    "High Risk":   { color: "text-sentio-danger",   bg: "bg-sentio-danger/10",   border: "border-sentio-danger/30" },
+  };
+  const style = contractRiskStyle[result.risk as keyof typeof contractRiskStyle] 
+    ?? contractRiskStyle["High Risk"];
+  const { color, bg, border } = style;
+  const label = result.risk;
+
   const activeFlags = Object.entries(result.riskBreakdown ?? {})
     .filter(([, v]) => Boolean(v))
     .map(([k]) => k);
@@ -1378,6 +1389,15 @@ export default function Explorer() {
     setSearchParams({ q: trimmed }, { replace: true });
     setState({ status: "loading" });
 
+    // XLM is native — not scannable as asset or account
+    if (trimmed.toUpperCase() === "XLM") {
+      setState({
+        status: "error",
+        message: "XLM is Stellar's native currency and doesn't have an issuer address. Try searching a specific asset like USDC:GXXXXXXX or an account address.",
+      });
+      return;
+    }
+
     // Contract ID: starts with C, 56 chars
     const isContract = /^C[A-Z2-7]{55}$/.test(trimmed);
 
@@ -1569,7 +1589,7 @@ export default function Explorer() {
             {[
               { label: "Example account",  value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
               { label: "USDC asset",       value: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "XLM (native)",    value: "XLM" },
+              { label: "AQUA asset",       value: "AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
               { label: "Contract scan",   value: "CBIELTK6YBZJU5UP2WWQEUCYKSCVI3OLFBIUWA4REBDWRGXCF4J2L4G3" },
             ].map(({ label, value }) => (
               <button

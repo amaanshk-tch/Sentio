@@ -74,6 +74,14 @@ export async function analyzeContract(contractId, { signal } = {}) {
 
   console.log("[analyzer] contractId:", contractId, "startLedger:", startLedger);
 
+  // Get real contract metadata from Stellar Expert (server-side, no CORS)
+  const expertData = await fetch(
+    `https://api.stellar.expert/explorer/testnet/contract/${contractId}`,
+    { signal: signal, headers: { accept: "application/json" } }
+  ).then(r => r.ok ? r.json() : null).catch(() => null);
+
+  console.log("[analyzer] expertData:", JSON.stringify(expertData));
+
   const [transactions, events] = await Promise.all([
     getTransactions(startLedger, { signal, limit: 200 }),
     getEvents(startLedger, contractId, { signal, limit: 100 }).catch((e) => {
@@ -113,12 +121,18 @@ export async function analyzeContract(contractId, { signal } = {}) {
   const eventPatternFlags = detectEventPatterns(events);
   const contractType = detectContractType(events);
 
+  // Use Stellar Expert data if available for accurate metrics
+  const invocationCount = expertData?.invocations ?? contractTxs.length;
+  const ageDaysFromExpert = expertData?.created 
+    ? Math.floor((Date.now() - expertData.created * 1000) / 86_400_000)
+    : ageDays;
+
   return {
     contractId,
     currentLedger,
     startLedger,
-    ageDays,
-    invocationCount: contractTxs.length,
+    ageDays: ageDaysFromExpert,
+    invocationCount,
     totalTxScanned: transactions.length,
     eventCount: events.length,
     eventCategories,

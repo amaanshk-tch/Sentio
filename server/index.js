@@ -9,28 +9,24 @@ import { rateLimitMiddleware } from "./utils/rateLimit.js";
 import { requireAdminToken } from "./utils/auth.js";
 import { scanHandler } from "./api/scan.js";
 import { contractScanHandler } from "./api/contract.js";
-import { historyHandler, flagsHandler, reportHandler, setRiskHandler } from "./api/registryApi.js";
+import { historyHandler, flagsHandler, reportHandler, setRiskHandler, submitHandler } from "./api/registryApi.js";
 import { setupWebSocket } from "./ws/stream.js";
 
 const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocketServer({ server, path: "/ws" });
 
-// Trust reverse-proxy headers (Render, Railway, etc.) so rate-limiting uses the real IP
 app.set("trust proxy", 1);
-
-// Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, etc.)
 app.use(helmet());
 
-// Restrict CORS to your frontend origin only
-// Added standard frontend ports for fallback
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN
   ? process.env.ALLOWED_ORIGIN.split(",")
-  : ["http://localhost:5173", "http://localhost:5174"];
+  : ["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"];
+
 app.use(cors({
   origin: ALLOWED_ORIGIN,
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type", "Authorization", "sentio-admin-token", "sentio_admin_token"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
 app.use(express.json({ limit: "32kb" }));
@@ -44,13 +40,39 @@ app.post("/api/scan/contract", rateLimitMiddleware(30), contractScanHandler);
 
 app.get("/api/registry/history/:address", historyHandler);
 app.get("/api/registry/flags/:address", flagsHandler);
-app.post("/api/registry/report", requireAdminToken, rateLimitMiddleware(10), reportHandler);
 
-/* ─── Admin Routes (require admin authentication) ───────────────────────── */
+/* ─── Admin Routes (require admin token) ────────────────────────────────── */
+
+// Verify that a connected wallet is the contract admin
+app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
+  const { signerAddress } = req.body;
+  if (!signerAddress) return res.status(400).json({ error: "Missing signerAddress." });
+  const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
+  if (!ADMIN_ADDRESS) return res.status(500).json({ error: "SENTIO_ADMIN_ADDRESS not configured." });
+  if (signerAddress !== ADMIN_ADDRESS) {
+    return res.status(403).json({ authorized: false, error: "Not authorized. Connected wallet is not the contract admin." });
+  }
+  return res.json({ authorized: true });
+});
+
+// Build unsigned transaction XDR (Freighter will sign it)
+app.post("/api/registry/report",   requireAdminToken, rateLimitMiddleware(10), reportHandler);
 app.post("/api/registry/set-risk", requireAdminToken, setRiskHandler);
+
+// Submit Freighter-signed transaction to the network
+app.post("/api/registry/submit", requireAdminToken, rateLimitMiddleware(10), submitHandler);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
 /* ─── Start Server ───────────────────────────────────────────────────────── */
 const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => console.log(`Sentio server running on http://localhost:${PORT}`));
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. Kill the existing process and try again.`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});

@@ -15,49 +15,39 @@ interface NetworkMetrics {
 }
 
 async function fetchMetrics(): Promise<NetworkMetrics> {
-  const sampleRes = await fetch(`${HORIZON}/ledgers?order=desc&limit=200`);
-  if (!sampleRes.ok) throw new Error("Horizon error");
-  const sampleData = await sampleRes.json();
+  const res = await fetch(`${HORIZON}/ledgers?order=desc&limit=200`);
+  if (!res.ok) throw new Error("Horizon error");
+  const data = await res.json();
   const ledgers: {
     sequence: number;
     closed_at: string;
     successful_transaction_count: number;
     failed_transaction_count: number;
     operation_count: number;
-  }[] = sampleData._embedded?.records ?? [];
+  }[] = data._embedded?.records ?? [];
 
   if (ledgers.length === 0) throw new Error("No ledger data");
 
-  const latestSequence = ledgers[0].sequence;
-
-  let ops24h = 0;
-  try {
-    const timestamp24hAgo = Math.floor((Date.now() - 86_400_000) / 1000);
-    const anchorRes = await fetch(`https://api.stellar.expert/explorer/public/ledger/find-by-time?timestamp=${timestamp24hAgo}`);
-    if (!anchorRes.ok) throw new Error("Stellar Expert error");
-    const { sequence: anchorSequence } = await anchorRes.json();
-    
-    const totalLedgers = latestSequence - anchorSequence;
-    const avgOps = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
-    ops24h = Math.round(avgOps * totalLedgers);
-  } catch {
-    const avgCloseTimeFallback = 5;
-    const avgOpsFallback = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
-    ops24h = Math.round(avgOpsFallback * ((24 * 3600) / avgCloseTimeFallback));
-  }
-
   const latestTs = new Date(ledgers[0].closed_at).getTime();
   const oldestTs = new Date(ledgers[ledgers.length - 1].closed_at).getTime();
-  const avgCloseTime = ledgers.length > 1 ? (latestTs - oldestTs) / (ledgers.length - 1) / 1000 : 5;
+  const spanMs = latestTs - oldestTs;
+  const avgCloseTime = ledgers.length > 1 ? spanMs / (ledgers.length - 1) / 1000 : 5;
 
   const totalSuccess = ledgers.reduce((s, l) => s + l.successful_transaction_count, 0);
-  const totalTx = totalSuccess + ledgers.reduce((s, l) => s + l.failed_transaction_count, 0);
+  const totalFailed  = ledgers.reduce((s, l) => s + l.failed_transaction_count, 0);
+  const totalTx = totalSuccess + totalFailed;
   const txSuccessPct = totalTx > 0 ? Math.round((totalSuccess / totalTx) * 100) : 100;
 
-  const status: NetworkMetrics["status"] = avgCloseTime < 8 ? "Stable" : avgCloseTime < 15 ? "Degraded" : "Unknown";
+  // Estimate 24h ops from actual close time — no third-party API needed
+  const opsPerLedger = ledgers.reduce((s, l) => s + l.operation_count, 0) / ledgers.length;
+  const ledgersPerDay = (24 * 3600) / Math.max(avgCloseTime, 1);
+  const ops24h = Math.round(opsPerLedger * ledgersPerDay);
+
+  const status: NetworkMetrics["status"] =
+    avgCloseTime < 8 ? "Stable" : avgCloseTime < 15 ? "Degraded" : "Unknown";
 
   return {
-    ledger: latestSequence,
+    ledger: ledgers[0].sequence,
     txSuccessPct,
     ops24h,
     avgCloseTime: Math.round(avgCloseTime * 10) / 10,
@@ -79,10 +69,9 @@ function useCountUp(target: number | null, duration = 900) {
   const prevRef = useRef(0);
 
   useEffect(() => {
-    if (target === null) { 
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setVal(null); 
-      return; 
+    if (target === null) {
+      setVal(null);
+      return;
     }
     const from = prevRef.current;
     prevRef.current = target;
@@ -101,7 +90,6 @@ function useCountUp(target: number | null, duration = 900) {
   return val;
 }
 
-
 const REFRESH_INTERVAL = 120;
 
 function CountdownRing({ onRefresh }: { onRefresh: () => void }) {
@@ -112,9 +100,7 @@ function CountdownRing({ onRefresh }: { onRefresh: () => void }) {
       aria-label="Refresh network data"
       className="group relative flex h-5 w-5 items-center justify-center rounded-lg bg-foreground/5 transition-colors hover:bg-foreground/10"
     >
-      <RefreshCw
-        className="h-3 w-3 text-sentio-text-muted transition-colors group-hover:text-foreground"
-      />
+      <RefreshCw className="h-3 w-3 text-sentio-text-muted transition-colors group-hover:text-foreground" />
     </button>
   );
 }
@@ -153,7 +139,7 @@ function StatTile({
   );
 }
 
-function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
+function StatusTile({ status, avgCloseTime }: { status: NetworkMetrics["status"] | null; avgCloseTime: number | null }) {
   const color =
     status === "Stable"   ? "hsl(43 96% 56%)"  :
     status === "Degraded" ? "hsl(25 95% 55%)"  : "hsl(0 0% 50%)";
@@ -165,7 +151,7 @@ function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-foreground/6 bg-background/30 p-3.5 backdrop-blur-sm">
       <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">
-        Network Status
+        Network Health
       </span>
       {status === null ? (
         <span className="sentio-shimmer mt-1 inline-block h-6 w-16 rounded" />
@@ -188,6 +174,9 @@ function StatusTile({ status }: { status: NetworkMetrics["status"] | null }) {
           </motion.span>
         </AnimatePresence>
       )}
+      {avgCloseTime !== null && (
+        <span className="mt-0.5 text-[0.6rem] text-sentio-text-muted">{avgCloseTime}s avg block time</span>
+      )}
     </div>
   );
 }
@@ -196,9 +185,7 @@ function LiveTimeAgo({ date }: { date: Date }) {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const update = () => {
-      setSeconds(Math.floor((Date.now() - date.getTime()) / 1000));
-    };
+    const update = () => setSeconds(Math.floor((Date.now() - date.getTime()) / 1000));
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
@@ -213,14 +200,12 @@ export function NetworkCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [tick, setTick] = useState(0);
-
   const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
-    
     try {
       const m = await fetchMetrics();
       setMetrics(m);
@@ -242,12 +227,9 @@ export function NetworkCard() {
     }, REFRESH_INTERVAL * 1000);
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        setTick(t => t + 1);
-      }
+      if (document.visibilityState === "visible") setTick(t => t + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
-
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
@@ -268,12 +250,9 @@ export function NetworkCard() {
 
       <div className="relative z-10 p-6">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-[0.6rem] font-semibold tracking-widest text-sentio-text-muted">
-              STELLAR NETWORK
-            </span>
-          </div>
-
+          <span className="text-[0.6rem] font-semibold tracking-widest text-sentio-text-muted">
+            STELLAR NETWORK
+          </span>
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sentio-success opacity-75" />
@@ -284,9 +263,9 @@ export function NetworkCard() {
         </div>
 
         <div className="mb-4">
-          <p className="text-sm font-semibold text-foreground">Live Network Snapshot</p>
+          <p className="text-sm font-semibold text-foreground">Is Stellar running normally?</p>
           <p className="text-[0.65rem] text-sentio-text-muted">
-            Ecosystem scale, activity, and health — before you explore.
+            Check network health before you search an address.
           </p>
         </div>
 
@@ -300,21 +279,25 @@ export function NetworkCard() {
           <StatTile
             label="Current Ledger"
             value={ledgerAnimated !== null ? fmtLarge(ledgerAnimated) : null}
+            sub="Stellar's block number"
             loading={loading && metrics === null}
           />
           <StatTile
-            label="Transaction Success"
+            label="Tx Success Rate"
             value={metrics ? `${metrics.txSuccessPct}%` : null}
-            sub={metrics ? `last ${metrics.ledgerCount} ledgers` : "computing..."}
+            sub={`last ${metrics?.ledgerCount ?? 200} ledgers`}
             loading={loading && metrics === null}
           />
           <StatTile
             label="Ops/Day (est.)"
             value={metrics ? fmtLarge(metrics.ops24h) : null}
-            sub="based on actual 24h ledger span"
+            sub="payments, trades & contract calls"
             loading={loading && metrics === null}
           />
-          <StatusTile status={metrics?.status ?? null} />
+          <StatusTile
+            status={metrics?.status ?? null}
+            avgCloseTime={metrics?.avgCloseTime ?? null}
+          />
         </div>
 
         <div className="mt-4 flex items-center justify-between">

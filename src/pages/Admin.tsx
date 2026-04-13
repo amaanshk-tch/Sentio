@@ -2,18 +2,17 @@ import { useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet } from "lucide-react";
-import { isConnected, getAddress, setAllowed } from "@stellar/freighter-api";
+import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle } from "lucide-react";
+import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
 
-// Generate one with: openssl rand -hex 32
-
 export default function Admin() {
-  const [token, setToken] = useState("");
+  const [token, setToken]       = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletVerified, setWalletVerified] = useState(false);
 
-
+  // ── Gate 1: connect + verify wallet is the contract admin ──────────────────
   const handleConnect = async () => {
     try {
       if (!await isConnected()) {
@@ -21,86 +20,131 @@ export default function Admin() {
         window.open("https://www.freighter.app/", "_blank");
         return;
       }
-      // Trigger the Freighter permission popup
       await setAllowed();
-
       const data = await getAddress();
-      if (data && data.address) {
-        setWalletAddress(data.address);
-        toast.success("Wallet connected!");
+      if (!data?.address) { toast.error("Could not get wallet address."); return; }
+
+      setWalletAddress(data.address);
+
+      // Verify with server that this wallet is the contract admin
+      const res = await fetch("/api/registry/verify-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ signerAddress: data.address }),
+      });
+      const result = await res.json();
+
+      if (res.ok && result.authorized) {
+        setWalletVerified(true);
+        toast.success("Wallet verified — you are the contract admin.");
+      } else {
+        setWalletVerified(false);
+        toast.error(result.error ?? "Not authorized. This wallet is not the contract admin.");
       }
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to connect wallet.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to connect wallet.");
     }
   };
 
-  // Set Risk State
-  const [riskAddress, setRiskAddress]     = useState("");
-  const [riskScore, setRiskScore]         = useState(0);
-  const [riskConfidence, setRiskConfidence] = useState(50);
-  const [riskCategory, setRiskCategory]   = useState("unknown");
-  const [isSettingRisk, setIsSettingRisk] = useState(false);
-
-  // Flag State
-  const [flagAddress, setFlagAddress]   = useState("");
-  const [flagReason, setFlagReason]     = useState("suspicious");
-  const [flagSeverity, setFlagSeverity] = useState(50);
-  const [isFlagging, setIsFlagging]     = useState(false);
-
-  const authHeaders = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
+  const handleDisconnect = () => {
+    setWalletAddress(null);
+    setWalletVerified(false);
   };
+
+  // ── Shared: sign XDR with Freighter then submit ────────────────────────────
+  const signAndSubmit = async (unsignedXdr: string): Promise<{ hash: string } | null> => {
+    try {
+      const result = await signTransaction(unsignedXdr, { networkPassphrase: "Test SDF Network ; September 2015" });
+      if (!result?.signedTxXdr) throw new Error("Freighter did not return a signed transaction.");
+
+      const submitRes = await fetch("/api/registry/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ signedXdr: result.signedTxXdr }),
+      });
+      const submitData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(submitData.error ?? "Submit failed.");
+      return { hash: submitData.hash };
+    } catch (err: any) {
+      throw new Error(err.message || "Transaction failed.");
+    }
+  };
+
+  // ── Set Risk ───────────────────────────────────────────────────────────────
+  const [riskAddress, setRiskAddress]       = useState("");
+  const [riskScore, setRiskScore]           = useState(0);
+  const [riskConfidence, setRiskConfidence] = useState(50);
+  const [riskCategory, setRiskCategory]     = useState("unknown");
+  const [isSettingRisk, setIsSettingRisk]   = useState(false);
 
   const handleSetRisk = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!riskAddress) { toast.error("Please provide a target address."); return; }
+    if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsSettingRisk(true);
     try {
+      // Step 1 — get unsigned XDR from server
       const res = await fetch("/api/registry/set-risk", {
         method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({ address: riskAddress, score: riskScore, confidence: riskConfidence, category: riskCategory }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          address: riskAddress, score: riskScore,
+          confidence: riskConfidence, category: riskCategory,
+          signerAddress: walletAddress,
+        }),
       });
       const data = await res.json();
-      if (res.ok) {
-        toast.success(`Risk set! Hash: ${data.hash}`);
-        setRiskAddress("");
-      } else if (res.status === 401) {
-        toast.error("Invalid admin token.");
-      } else {
-        toast.error(`Error: ${data.error || data.reason}`);
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to build transaction.");
+        return;
       }
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to set risk.");
+
+      // Step 2 — Freighter signs, server submits
+      const submitted = await signAndSubmit(data.unsignedXdr);
+      if (submitted) {
+        toast.success(`Risk set! Hash: ${submitted.hash}`);
+        setRiskAddress("");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to set risk.");
     } finally {
       setIsSettingRisk(false);
     }
   };
 
+  // ── Flag Address ───────────────────────────────────────────────────────────
+  const [flagAddress, setFlagAddress]   = useState("");
+  const [flagReason, setFlagReason]     = useState("suspicious");
+  const [flagSeverity, setFlagSeverity] = useState(50);
+  const [isFlagging, setIsFlagging]     = useState(false);
+
   const handleFlag = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!flagAddress) { toast.error("Please provide a target address."); return; }
+    if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsFlagging(true);
     try {
+      // Step 1 — get unsigned XDR from server
       const res = await fetch("/api/registry/report", {
         method: "POST",
-        headers: authHeaders,
-        // Note: the server uses SENTIO_ADMIN_SECRET from env to sign the Soroban tx.
-        // We pass the reporter's Stellar address if needed, but NOT a private key.
-        body: JSON.stringify({ address: flagAddress, reason: flagReason, severity: flagSeverity }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          address: flagAddress, reason: flagReason,
+          severity: flagSeverity, signerAddress: walletAddress,
+        }),
       });
       const data = await res.json();
-      if (res.ok) {
-        toast.success(`Flagged! Hash: ${data.hash}`);
-        setFlagAddress("");
-      } else if (res.status === 401) {
-        toast.error("Invalid admin token.");
-      } else {
-        toast.error(`Error: ${data.error || data.reason}`);
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to build transaction.");
+        return;
       }
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to flag.");
+
+      // Step 2 — Freighter signs, server submits
+      const submitted = await signAndSubmit(data.unsignedXdr);
+      if (submitted) {
+        toast.success(`Flagged! Hash: ${submitted.hash}`);
+        setFlagAddress("");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to flag.");
     } finally {
       setIsFlagging(false);
     }
@@ -113,16 +157,25 @@ export default function Admin() {
         <div className="flex items-center gap-3">
           {unlocked && (
             <button
-              onClick={handleConnect}
-              className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary shadow-sentio-sm backdrop-blur-md transition hover:bg-primary/20 hover:border-primary/30 active:scale-95"
+              onClick={walletAddress ? handleDisconnect : handleConnect}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold shadow-sentio-sm backdrop-blur-md transition active:scale-95 ${
+                walletVerified
+                  ? "border-sentio-success/30 bg-sentio-success/10 text-sentio-success hover:bg-sentio-success/20"
+                  : walletAddress
+                    ? "border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger hover:bg-sentio-danger/20"
+                    : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/30"
+              }`}
             >
-              <Wallet className="h-4 w-4" />
-              {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : "Connect Wallet"}
+              {walletVerified
+                ? <><CheckCircle className="h-4 w-4" /> {walletAddress!.slice(0, 4)}...{walletAddress!.slice(-4)}</>
+                : walletAddress
+                  ? <><AlertCircle className="h-4 w-4" /> Not Authorized</>
+                  : <><Wallet className="h-4 w-4" /> Connect Wallet</>
+              }
             </button>
           )}
           <Link
             to="/"
-            onClick={() => setWalletAddress(null)}
             className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -143,7 +196,7 @@ export default function Admin() {
         </p>
       </div>
 
-      {/* Token gate */}
+      {/* Gate 1 — Admin token */}
       {!unlocked ? (
         <div className="mb-8 p-6 rounded-2xl border border-foreground/8 bg-sentio-elevated/80 w-full max-w-md">
           <div className="flex items-center gap-2 mb-4">
@@ -151,7 +204,7 @@ export default function Admin() {
             <h2 className="text-base font-semibold">Enter admin token</h2>
           </div>
           <p className="text-sm text-sentio-text-muted mb-4">
-            This is the <code className="text-xs bg-white/10 rounded px-1 py-0.5">SENTIO_ADMIN_TOKEN</code> you set in your server environment — not a Stellar secret key.
+            This is the <code className="text-xs bg-white/10 rounded px-1 py-0.5">SENTIO_ADMIN_TOKEN</code> set in your server environment.
           </p>
           <input
             type="password"
@@ -172,26 +225,64 @@ export default function Admin() {
       ) : (
         <>
           <div className="mb-6 flex items-center justify-between max-w-5xl">
-            <p className="text-sm text-sentio-success flex items-center gap-2">
-              <Lock className="h-4 w-4" /> Authenticated
-            </p>
+            <div className="flex items-center gap-4 text-sm">
+              <p className="text-sentio-success flex items-center gap-2">
+                <Lock className="h-4 w-4" /> Authenticated
+              </p>
+              {/* Gate 2 — Wallet verification status */}
+              {!walletAddress ? (
+                <p className="text-sentio-text-muted flex items-center gap-2">
+                  <Wallet className="h-4 w-4" />
+                  Connect your Freighter wallet to sign transactions
+                </p>
+              ) : walletVerified ? (
+                <p className="text-sentio-success flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" /> Contract admin verified
+                </p>
+              ) : (
+                <p className="text-sentio-danger flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" /> Wrong wallet — not the contract admin
+                </p>
+              )}
+            </div>
             <button
-              onClick={() => { setToken(""); setUnlocked(false); setWalletAddress(null); }}
+              onClick={() => { setToken(""); setUnlocked(false); setWalletAddress(null); setWalletVerified(false); }}
               className="text-xs text-sentio-text-muted hover:text-foreground transition-colors"
             >
               Sign out
             </button>
           </div>
 
+          {/* Wallet connect prompt if not yet connected */}
+          {!walletVerified && (
+            <div className="mb-6 max-w-5xl rounded-2xl border border-primary/20 bg-primary/5 p-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Connect your Freighter wallet</p>
+                <p className="text-xs text-sentio-text-muted mt-1">
+                  You must connect the same wallet used to initialize the contract. 
+                  Transactions will be signed by Freighter — your key never leaves your browser.
+                </p>
+              </div>
+              <button
+                onClick={handleConnect}
+                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition"
+              >
+                <Wallet className="h-4 w-4" />
+                {walletAddress ? "Retry" : "Connect Wallet"}
+              </button>
+            </div>
+          )}
+
           <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
             {/* Set Risk Form */}
-            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4">
+            <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5 text-primary" />
                 <h2 className="text-xl font-bold">Set Risk Data</h2>
               </div>
-              <p className="text-sm text-sentio-text-muted">Manually overwrite the on-chain risk score for a Stellar address.</p>
-
+              <p className="text-sm text-sentio-text-muted">
+                Manually overwrite the on-chain risk score. Freighter will prompt you to sign.
+              </p>
               <form onSubmit={handleSetRisk} className="space-y-4">
                 <div>
                   <label className="block text-sm text-sentio-text-secondary mb-1">Target Address</label>
@@ -219,19 +310,20 @@ export default function Admin() {
                 </div>
                 <button type="submit" disabled={isSettingRisk}
                   className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
-                  {isSettingRisk ? "Broadcasting..." : "Save Risk Assessment"}
+                  {isSettingRisk ? "Waiting for Freighter..." : "Save Risk Assessment"}
                 </button>
               </form>
             </div>
 
             {/* Flag Form */}
-            <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4">
+            <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
               <div className="flex items-center gap-2">
                 <Flag className="h-5 w-5 text-sentio-warning" />
                 <h2 className="text-xl font-bold">Flag Address</h2>
               </div>
-              <p className="text-sm text-sentio-text-muted">Report an address for suspicious behavior on the registry.</p>
-
+              <p className="text-sm text-sentio-text-muted">
+                Report a suspicious address. Freighter will prompt you to sign.
+              </p>
               <form onSubmit={handleFlag} className="space-y-4">
                 <div>
                   <label className="block text-sm text-sentio-text-secondary mb-1">Suspect Address</label>
@@ -252,7 +344,7 @@ export default function Admin() {
                 </div>
                 <button type="submit" disabled={isFlagging}
                   className="mt-2 w-full rounded-xl bg-sentio-warning px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
-                  {isFlagging ? "Broadcasting..." : "Submit Flag"}
+                  {isFlagging ? "Waiting for Freighter..." : "Submit Flag"}
                 </button>
               </form>
             </div>

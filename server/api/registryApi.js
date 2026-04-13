@@ -1,4 +1,11 @@
-import { getOnchainHistory, getOnchainFlags, flagOnchain, setOnchainRisk } from "../soroban/registry.js";
+import { 
+  getOnchainHistory, 
+  getOnchainFlags, 
+  setOnchainRisk,
+  buildFlagTransaction,
+  buildSetRiskTransaction,
+  submitSignedTransaction,
+} from "../soroban/registry.js";
 
 const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
 const ASSET_RE   = /^[A-Z0-9]{1,12}:[A-Z2-7]{56}$/;
@@ -33,13 +40,17 @@ export async function flagsHandler(req, res) {
   }
 }
 
+// Step 1: Build unsigned flag transaction — returns XDR for Freighter to sign
 export async function reportHandler(req, res) {
-  const { address, reason, severity } = req.body;
-  if (!address || !reason || severity === undefined) {
+  const { address, reason, severity, signerAddress } = req.body;
+  if (!address || !reason || severity === undefined || !signerAddress) {
     return res.status(400).json({ error: "Missing required fields." });
   }
   if (!isValidAddress(address)) {
     return res.status(400).json({ error: "Invalid address format." });
+  }
+  if (!ACCOUNT_RE.test(signerAddress)) {
+    return res.status(400).json({ error: "Invalid signer address." });
   }
   if (typeof reason !== "string" || reason.length > 64 || !/^[\w\s-]+$/.test(reason)) {
     return res.status(400).json({ error: "Reason must be alphanumeric, max 64 chars." });
@@ -48,27 +59,36 @@ export async function reportHandler(req, res) {
   if (!Number.isInteger(sev) || sev < 0 || sev > 100) {
     return res.status(400).json({ error: "Severity must be an integer 0-100." });
   }
+
+  // Verify the connected wallet matches the contract admin
+  const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
+  if (!ADMIN_ADDRESS) {
+    return res.status(500).json({ error: "Server admin address not configured." });
+  }
+  if (signerAddress !== ADMIN_ADDRESS) {
+    return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
+  }
+
   try {
-    const secret = process.env.SENTIO_ADMIN_SECRET;
-    if (!secret) {
-      return res.status(500).json({ error: "Server missing admin credentials." });
-    }
-    const result = await flagOnchain(secret, address, reason, sev);
-    return result.success ? res.json(result) : res.status(400).json(result);
+    const unsignedXdr = await buildFlagTransaction(signerAddress, address, reason, sev);
+    return res.json({ unsignedXdr });
   } catch (err) {
+    console.error("[reportHandler] buildFlagTransaction failed:", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
+// Step 1: Build unsigned set-risk transaction — returns XDR for Freighter to sign
 export async function setRiskHandler(req, res) {
-  // Route is guarded by requireAdminToken in server/index.js
-  // SENTIO_ADMIN_SECRET is read from env only — never from the request body
-  const { address, score, confidence, category } = req.body;
-  if (!address || score === undefined || confidence === undefined || !category) {
+  const { address, score, confidence, category, signerAddress } = req.body;
+  if (!address || score === undefined || confidence === undefined || !category || !signerAddress) {
     return res.status(400).json({ error: "Missing required fields." });
   }
   if (!isValidAddress(address)) {
     return res.status(400).json({ error: "Invalid address format." });
+  }
+  if (!ACCOUNT_RE.test(signerAddress)) {
+    return res.status(400).json({ error: "Invalid signer address." });
   }
   const s = Number(score), c = Number(confidence);
   if (!Number.isInteger(s) || s < 0 || s > 100) return res.status(400).json({ error: "Score must be 0-100." });
@@ -76,8 +96,30 @@ export async function setRiskHandler(req, res) {
   if (typeof category !== "string" || category.length > 32 || !/^[\w-]+$/.test(category)) {
     return res.status(400).json({ error: "Category must be alphanumeric, max 32 chars." });
   }
+
+  // Verify the connected wallet matches the contract admin
+  const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
+  if (!ADMIN_ADDRESS) {
+    return res.status(500).json({ error: "Server admin address not configured." });
+  }
+  if (signerAddress !== ADMIN_ADDRESS) {
+    return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
+  }
+
   try {
-    const result = await setOnchainRisk(address, { score: s, confidence: c, category });
+    const unsignedXdr = await buildSetRiskTransaction(signerAddress, address, s, c, category);
+    return res.json({ unsignedXdr });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// Step 2: Submit the Freighter-signed transaction to the network
+export async function submitHandler(req, res) {
+  const { signedXdr } = req.body;
+  if (!signedXdr) return res.status(400).json({ error: "Missing signedXdr." });
+  try {
+    const result = await submitSignedTransaction(signedXdr);
     return result.success ? res.json(result) : res.status(400).json(result);
   } catch (err) {
     return res.status(500).json({ error: err.message });
