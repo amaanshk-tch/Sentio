@@ -65,7 +65,6 @@ export function analyzeTransactionPatterns(records) {
 
   const flags = [];
 
-  // Burst detection: ≥10 tx in any 1-hour window
   const timestamps = records
     .map((r) => Date.parse(r.created_at || ""))
     .filter(Number.isFinite)

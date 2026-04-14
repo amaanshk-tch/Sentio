@@ -1,6 +1,6 @@
 const cache = new Map();
 const CACHE_TTL_MS = 3 * 60 * 1000;
-const CACHE_MAX    = 500; // max entries before LRU eviction
+const CACHE_MAX    = 500;
 
 export function cacheGet(k) {
   const e = cache.get(k);
@@ -8,14 +8,12 @@ export function cacheGet(k) {
     cache.delete(k);
     return null;
   }
-  // Refresh access order (LRU: move to end)
   cache.delete(k);
   cache.set(k, e);
   return e.data;
 }
 
 export function cacheSet(k, d) {
-  // Evict oldest entry when at capacity
   if (cache.size >= CACHE_MAX) {
     const oldest = cache.keys().next().value;
     cache.delete(oldest);
@@ -23,7 +21,6 @@ export function cacheSet(k, d) {
   cache.set(k, { data: d, expiry: Date.now() + CACHE_TTL_MS });
 }
 
-// Periodic cleanup of expired entries (every 2 minutes)
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of cache) {
