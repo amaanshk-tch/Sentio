@@ -31,7 +31,6 @@ app.use(cors({
 
 app.use(express.json({ limit: "32kb" }));
 
-/* ─── WebSocket Live Stream ──────────────────────────────────────────────── */
 setupWebSocket(wss);
 
 /* ─── Public API Routes ──────────────────────────────────────────────────── */
@@ -43,10 +42,8 @@ app.get("/api/registry/flags/:address", flagsHandler);
 
 /* ─── Admin Routes (require admin token) ────────────────────────────────── */
 
-// Verify that the provided admin token is valid
 app.post("/api/registry/verify-token", requireAdminToken, (req, res) => res.json({ valid: true }));
 
-// Verify that a connected wallet is the contract admin
 app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
   const { signerAddress } = req.body;
   if (!signerAddress) return res.status(400).json({ error: "Missing signerAddress." });
@@ -58,11 +55,9 @@ app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
   return res.json({ authorized: true });
 });
 
-// Build unsigned transaction XDR (Freighter will sign it)
 app.post("/api/registry/report",   requireAdminToken, rateLimitMiddleware(10), reportHandler);
 app.post("/api/registry/set-risk", requireAdminToken, setRiskHandler);
 
-// Submit Freighter-signed transaction to the network
 app.post("/api/registry/submit", requireAdminToken, rateLimitMiddleware(10), submitHandler);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
