@@ -305,7 +305,6 @@ export default function Admin() {
               </form>
             </div>
 
-            {/* Flag Form */}
             <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
               <div className="flex items-center gap-2">
                 <Flag className="h-5 w-5 text-sentio-warning" />
