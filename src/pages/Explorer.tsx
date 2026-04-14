@@ -116,10 +116,16 @@ function useLiveStream(
   useEffect(() => {
     wsRef.current?.close();
     wsRef.current = null;
-    setStatus("idle");
-    setLastTxId(null);
 
-    if (!accountId) return;
+    let mounted = true;
+    setTimeout(() => {
+      if (mounted) {
+        setStatus("idle");
+        setLastTxId(null);
+      }
+    }, 0);
+
+    if (!accountId) return () => { mounted = false; };
 
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
@@ -134,20 +140,26 @@ function useLiveStream(
       try {
         const msg = JSON.parse(ev.data as string);
         if (msg.type === "update") {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { type: _t, newTx, ...scanPatch } = msg;
           if (newTx?.id) setLastTxId(newTx.id as string);
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
         } else if (msg.type === "stream_stopped") {
           setStatus("stopped");
         }
-      } catch {}
+      } catch (err) {
+        console.warn("WebSocket parse error", err);
+      }
     };
 
     ws.onerror  = () => setStatus("stopped");
     ws.onclose  = () => setStatus((s) => s === "live" ? "stopped" : s);
 
     return () => {
-      ws.send(JSON.stringify({ type: "unsubscribe" }));
+      mounted = false;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "unsubscribe" }));
+      }
       ws.close();
       wsRef.current = null;
     };
@@ -413,7 +425,8 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
 }
 
 function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
-  const recentFlags = flags.filter(f => (Date.now() - f.timestamp) <= 24 * 60 * 60 * 1000);
+  const [now] = useState(() => Date.now());
+  const recentFlags = flags.filter(f => (now - f.timestamp) <= 24 * 60 * 60 * 1000);
   if (recentFlags.length === 0) return null;
 
   const maxSeverity = Math.max(...recentFlags.map(f => f.severity));
@@ -1426,6 +1439,7 @@ export default function Explorer() {
   useEffect(() => {
     const q = searchParams.get("q");
     if (q) handleSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = () => {
