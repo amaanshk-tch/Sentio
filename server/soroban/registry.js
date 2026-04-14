@@ -16,7 +16,6 @@ const NETWORK_PASSPHRASE = SOROBAN_NETWORK_PASSPHRASE;
 const CONTRACT_ID = process.env.RISK_REGISTRY_CONTRACT_ID;
 const ADMIN_SECRET = process.env.SENTIO_ADMIN_SECRET;
 
-// Testnet Horizon — contract ops use testnet accounts, not mainnet
 const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
 
 const rpcServer = new rpc.Server(RPC_URL);
@@ -137,7 +136,7 @@ export async function getOnchainHistory(address) {
           confidence: Number(item.confidence),
           category: item.category ? item.category.toString() : "",
           last_updated: Number(item.last_updated) * 1000 
-        })).reverse(); // Contract returns oldest->newest (chronological). We reverse for UI (newest first).
+        })).reverse(); 
       }
     }
     return [];
@@ -213,7 +212,7 @@ export async function getOnchainFlags(address) {
           reason: item.reason ? item.reason.toString() : "",
           severity: Number(item.severity),
           timestamp: Number(item.timestamp) * 1000 
-        })).reverse(); // Contract returns oldest->newest. Reverse for UI rendering.
+        })).reverse(); 
       }
     }
     return [];
@@ -222,8 +221,6 @@ export async function getOnchainFlags(address) {
     return [];
   }
 }
-
-// ─── Freighter-compatible: build unsigned transactions ────────────────────────
 
 export async function buildFlagTransaction(signerAddress, address, reason, severity) {
   if (!CONTRACT_ID) throw new Error("No contract configured.");
@@ -296,7 +293,7 @@ export async function buildSetRiskTransaction(signerAddress, address, score, con
   }
 
   const assembled = rpc.assembleTransaction(tx, sim).build();
-  return assembled.toXDR(); // unsigned — Freighter will sign this
+  return assembled.toXDR();
 }
 
 export async function submitSignedTransaction(signedXdr) {

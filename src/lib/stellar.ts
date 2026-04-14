@@ -95,8 +95,6 @@ export interface LedgerStats {
   base_fee_in_stroops: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function isAccountId(input: string): boolean {
   return /^G[A-Z2-7]{55}$/.test(input.trim());
 }
@@ -112,8 +110,6 @@ function parseAssetInput(input: string): { code: string; issuer?: string } | nul
   }
   return null;
 }
-
-// ─── API calls ────────────────────────────────────────────────────────────────
 
 export async function fetchAccount(address: string): Promise<HorizonAccount> {
   const res = await fetch(`${HORIZON}/accounts/${address.trim()}`);
@@ -163,8 +159,6 @@ export async function fetchLatestLedger(): Promise<LedgerStats | null> {
     return null;
   }
 }
-
-// ─── Smart detect: account vs asset ──────────────────────────────────────────
 
 export type SearchMode = "account" | "asset";
 

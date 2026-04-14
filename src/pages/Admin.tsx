@@ -9,8 +9,30 @@ import { toast } from "sonner";
 export default function Admin() {
   const [token, setToken]       = useState("");
   const [unlocked, setUnlocked] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletVerified, setWalletVerified] = useState(false);
+
+  const handleUnlock = async () => {
+    if (!token.trim()) return;
+    setIsUnlocking(true);
+    try {
+      const res = await fetch("/api/registry/verify-token", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setUnlocked(true);
+        toast.success("Dashboard unlocked.");
+      } else {
+        toast.error("Invalid admin token.");
+      }
+    } catch {
+      toast.error("Failed to verify token.");
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
 
   const handleConnect = async () => {
     try {
@@ -202,14 +224,14 @@ export default function Admin() {
             onChange={e => setToken(e.target.value)}
             className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-3 px-4 font-mono text-sm text-foreground placeholder-sentio-text-muted outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15 mb-3"
             placeholder="Paste admin token..."
-            onKeyDown={e => { if (e.key === "Enter" && token.trim()) setUnlocked(true); }}
+            onKeyDown={e => { if (e.key === "Enter" && token.trim()) handleUnlock(); }}
           />
           <button
-            onClick={() => { if (token.trim()) setUnlocked(true); }}
-            disabled={!token.trim()}
+            onClick={handleUnlock}
+            disabled={!token.trim() || isUnlocking}
             className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
-            Unlock Dashboard
+            {isUnlocking ? "Verifying..." : "Unlock Dashboard"}
           </button>
         </div>
       ) : (
@@ -243,7 +265,6 @@ export default function Admin() {
             </button>
           </div>
 
-          {/* Wallet connect prompt if not yet connected */}
           {!walletVerified && (
             <div className="mb-6 max-w-5xl rounded-2xl border border-primary/20 bg-primary/5 p-5 flex items-center justify-between gap-4">
               <div>
@@ -264,7 +285,6 @@ export default function Admin() {
           )}
 
           <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
-            {/* Set Risk Form */}
             <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5 text-primary" />

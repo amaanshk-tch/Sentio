@@ -97,8 +97,6 @@ interface ContractScanResult {
   onchainRiskData: OnchainRisk | null;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 // ─── WebSocket live stream hook ───────────────────────────────────────────────
 
 type StreamStatus = "idle" | "live" | "stopped";
@@ -116,10 +114,8 @@ function useLiveStream(
   }, [onUpdate]);
 
   useEffect(() => {
-    // close any previous socket
     wsRef.current?.close();
     wsRef.current = null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("idle");
     setLastTxId(null);
 
@@ -138,14 +134,13 @@ function useLiveStream(
       try {
         const msg = JSON.parse(ev.data as string);
         if (msg.type === "update") {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { type: _t, newTx, ...scanPatch } = msg;
           if (newTx?.id) setLastTxId(newTx.id as string);
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
         } else if (msg.type === "stream_stopped") {
           setStatus("stopped");
         }
-      } catch { /* ignore */ }
+      } catch {}
     };
 
     ws.onerror  = () => setStatus("stopped");
@@ -160,8 +155,6 @@ function useLiveStream(
 
   return { status, lastTxId };
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmt(n: number, dec = 4) {
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
@@ -185,7 +178,6 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-// ─── Risk Score helpers ───────────────────────────────────────────────────────
 
 function deriveRiskLabel(score: number): { label: string; color: string; bg: string; border: string } {
   if (score <= 20) return { label: "Safe",      color: "text-sentio-success",  bg: "bg-sentio-success/10",  border: "border-sentio-success/30" };
@@ -202,7 +194,6 @@ function levelBadge(level?: "LOW" | "MEDIUM" | "HIGH") {
   return "border-foreground/10 bg-foreground/5 text-sentio-text-muted";
 }
 
-// ─── Copy button ──────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -222,13 +213,10 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ─── Skeleton loader ──────────────────────────────────────────────────────────
 
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`sentio-shimmer rounded-lg ${className}`} />;
 }
-
-// ─── Risk Score Card ──────────────────────────────────────────────────────────
 
 function RiskScoreCard({ onchainHistory }: { onchainHistory: OnchainRisk[] }) {
   if (onchainHistory.length === 0) return null;
@@ -258,7 +246,6 @@ function RiskScoreCard({ onchainHistory }: { onchainHistory: OnchainRisk[] }) {
   );
 }
 
-// Risk factor pill metadata
 const RISK_FACTOR_META: Record<string, { label: string; variant: "danger" | "warning" | "muted" }> = {
   newAccount:           { label: "New account",           variant: "danger"  },
   highVelocity:         { label: "High velocity",         variant: "danger"  },
@@ -284,7 +271,6 @@ function RiskFactorPills({ riskFactors }: { riskFactors: ScanRiskFactors }) {
     const val = riskFactors[key as keyof ScanRiskFactors];
     if (val) active.push({ key, ...meta });
   }
-  // suspiciousTxPattern is a string, not a boolean
   if (riskFactors.suspiciousTxPattern) {
     active.push({
       key: "suspiciousTxPattern",
@@ -328,7 +314,6 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
             <p key={scan.score} className={`text-4xl font-bold tabular-nums ${color} ${isLive ? "animate-score-flash" : ""}`}>
               {scan.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
             </p>
-            {/* Trend arrow */}
             {scan.trend && scan.trend !== "stable" && (
               <span className={`flex items-center gap-0.5 text-sm font-bold mb-1 ${
                 scan.trend === "up" ? "text-sentio-danger" : "text-sentio-success"
@@ -358,7 +343,6 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
               Updated {timeAgo(new Date(scan.lastUpdated).toISOString())}
             </p>
           )}
-          {/* Share / copy link */}
           <button
             onClick={() => { navigator.clipboard.writeText(window.location.href); }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-sentio-surface/50 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-sentio-text-muted hover:text-foreground hover:bg-white/5 transition-colors"
@@ -368,7 +352,6 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
         </div>
       </div>
 
-      {/* Risk factor pills — truthy flags only */}
       {scan.riskFactors && <RiskFactorPills riskFactors={scan.riskFactors} />}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -419,7 +402,6 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
         </div>
       )}
 
-      {/* Insight callout — human-readable summary sentence */}
       {scan.insight && (
         <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/8 px-4 py-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -430,10 +412,7 @@ function EngineRiskCard({ scan, isLive }: { scan: ScanResult | null; isLive?: bo
   );
 }
 
-// ─── 24h Flag Banner ──────────────────────────────────────────────────────────
-
 function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
-  // eslint-disable-next-line react-hooks/purity
   const recentFlags = flags.filter(f => (Date.now() - f.timestamp) <= 24 * 60 * 60 * 1000);
   if (recentFlags.length === 0) return null;
 
@@ -469,8 +448,6 @@ function FlagBanner({ flags }: { flags: OnchainFlag[] }) {
     </motion.div>
   );
 }
-
-// ─── Scan Breakdown Card ─────────────────────────────────────────────────────
 
 const toneStyles: Record<string, { border: string; bg: string; text: string; badge: string; dot: string }> = {
   emerald: {
@@ -534,7 +511,6 @@ function ScanBreakdownCard({ breakdown }: { breakdown: ScanBreakdownItem[] }) {
               key={item.key}
               className={`relative flex flex-col gap-2 rounded-xl border p-4 transition-colors ${tone.border} ${tone.bg}`}
             >
-              {/* Header row */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
@@ -544,13 +520,9 @@ function ScanBreakdownCard({ breakdown }: { breakdown: ScanBreakdownItem[] }) {
                   </span>
                 </div>
               </div>
-
-              {/* Value */}
               <p className={`text-base font-bold leading-snug ${item.value === "—" ? "text-sentio-text-muted" : "text-foreground"}`}>
                 {item.value}
               </p>
-
-              {/* Status badge */}
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${tone.badge}`}>
                   {item.status}
@@ -624,16 +596,12 @@ function OnchainHistoryCard({ history }: { history: OnchainRisk[] }) {
   );
 }
 
-// ─── Protocol Flag label descriptions ─────────────────────────────────────────
-
 const FLAG_DESCRIPTIONS: Record<string, string> = {
   auth_required:        "The issuer must approve any account that wants to hold this asset.",
   auth_revocable:       "The issuer can freeze an account's ability to transact with this asset.",
   auth_immutable:       "The above auth settings can never be changed — they are locked forever.",
   auth_clawback_enabled:"The issuer can claw back (forcibly retrieve) this asset from any holder.",
 };
-
-// ─── Account Result Panel ──────────────────────────────────────────────────────
 
 interface AccountPanelProps {
   account: HorizonAccount;
@@ -656,7 +624,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
       <RiskScoreCard onchainHistory={onchainHistory} />
       <FlagBanner flags={onchainFlags} />
 
-      {/* Identity header */}
       <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -711,7 +678,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Protocol Flags */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Shield className="h-4 w-4" /> Account Protocol Flags
@@ -740,7 +706,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
           )}
         </div>
 
-        {/* Signers */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Key className="h-4 w-4" /> Signers & Thresholds
@@ -770,7 +735,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Trustlines — always rendered, shows empty state if none */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[400px] flex flex-col">
           <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Layers className="h-4 w-4" /> Trustlines ({tokens.length})
@@ -809,7 +773,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
           )}
         </div>
 
-        {/* Recent Transactions — always rendered */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[400px] flex flex-col">
           <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Clock className="h-4 w-4" /> Recent Transactions
@@ -845,7 +808,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
         </div>
       </div>
 
-      {/* Onchain flags & history */}
       {(onchainFlags.length > 0 || onchainHistory.length > 0) && (
         <div className="grid lg:grid-cols-2 gap-4">
           {onchainFlags.length > 0 && <OnchainFlagsCard flags={onchainFlags} />}
@@ -853,7 +815,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
         </div>
       )}
 
-      {/* Recent Operations */}
       {ops.length > 0 && (
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 max-h-[350px] flex flex-col">
           <h3 className="mb-4 text-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-sentio-text-muted">
@@ -882,10 +843,8 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
         </div>
       )}
 
-      {/* Counterparties + Operation Breakdown */}
       {scanResult && (scanResult.counterparties || scanResult.operationBreakdown) && (
         <div className="grid lg:grid-cols-2 gap-4">
-          {/* Counterparty viewer */}
           {scanResult.counterparties && (
             <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
@@ -922,7 +881,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
             </div>
           )}
 
-          {/* Operation-type breakdown */}
           {scanResult.operationBreakdown && Object.keys(scanResult.operationBreakdown).length > 0 && (
             <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
@@ -959,10 +917,8 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
         </div>
       )}
 
-      {/* DEX Exposure + Claimable Balances */}
       {scanResult && (scanResult.dexExposure || scanResult.claimableBalances) && (
         <div className="grid lg:grid-cols-2 gap-4">
-          {/* DEX exposure */}
           {scanResult.dexExposure && (
             <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
@@ -989,7 +945,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
             </div>
           )}
 
-          {/* Claimable balances */}
           {scanResult.claimableBalances && (
             <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
@@ -1018,8 +973,6 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
   );
 }
 
-// ─── Asset Result Panel ────────────────────────────────────────────────────────
-
 interface AssetPanelProps {
   asset: HorizonAsset;
   onchainHistory: OnchainRisk[];
@@ -1038,7 +991,6 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
       <RiskScoreCard onchainHistory={onchainHistory} />
       <FlagBanner flags={onchainFlags} />
 
-      {/* Identity */}
       <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex-1 w-full">
@@ -1107,7 +1059,6 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Protocol Flags */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Shield className="h-4 w-4" /> Asset Protocol Flags
@@ -1133,7 +1084,6 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
           </div>
         </div>
 
-        {/* Balance breakdown */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 flex flex-col">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted">
             <Coins className="h-4 w-4" /> Balance Exposure
@@ -1170,11 +1120,8 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
   );
 }
 
-// ─── Contract Panel ────────────────────────────────────────────────────────────
-
 function ContractPanel({ result }: { result: ContractScanResult }) {
-  // Contract score is INVERTED — 100 = safe, 0 = critical
-  // Use server-provided risk label directly, not deriveRiskLabel
+  // Contract score is INVERTED, 100 = safe, 0 = critical
   const contractRiskStyle = {
     "Low Risk":    { color: "text-sentio-success",  bg: "bg-sentio-success/10",  border: "border-sentio-success/30" },
     "Medium Risk": { color: "text-sentio-warning",  bg: "bg-sentio-warning/10",  border: "border-sentio-warning/30" },
@@ -1191,7 +1138,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
 
   return (
     <div className="space-y-4">
-      {/* Score card */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1213,7 +1159,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
           </div>
         </div>
 
-        {/* Risk breakdown flags */}
         {activeFlags.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {activeFlags.map((f) => (
@@ -1224,7 +1169,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
           </div>
         )}
 
-        {/* Insight callout */}
         {result.insights && result.insights.length > 0 && (
           <div className="mt-3 space-y-1.5">
             {result.insights.map((ins, i) => (
@@ -1236,7 +1180,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
           </div>
         )}
 
-        {/* Recommendation */}
         {result.recommendation && (
           <div className="mt-3 rounded-xl border border-foreground/8 bg-black/20 px-4 py-3 text-sm text-sentio-text-secondary">
             <span className="font-semibold text-foreground">Recommendation:</span> {result.recommendation}
@@ -1244,7 +1187,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
         )}
       </motion.div>
 
-      {/* Identity + summary */}
       <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
@@ -1287,9 +1229,7 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
         </div>
       </div>
 
-      {/* Behavior + events */}
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Dominant caller ratio */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
             <Users className="h-4 w-4" /> Caller Concentration
@@ -1318,7 +1258,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
           )}
         </div>
 
-        {/* Event categories */}
         <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-sentio-text-muted flex items-center gap-2">
             <Layers className="h-4 w-4" /> Event Categories
@@ -1347,7 +1286,6 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
         </div>
       </div>
 
-      {/* On-chain risk history if available */}
       {result.onchainRiskData && (
         <RiskScoreCard onchainHistory={[result.onchainRiskData]} />
       )}
@@ -1388,7 +1326,6 @@ export default function Explorer() {
     setSearchParams({ q: trimmed }, { replace: true });
     setState({ status: "loading" });
 
-    // XLM is native — not scannable as asset or account
     if (trimmed.toUpperCase() === "XLM") {
       setState({
         status: "error",
@@ -1397,7 +1334,6 @@ export default function Explorer() {
       return;
     }
 
-    // Contract ID: starts with C, 56 chars
     const isContract = /^C[A-Z2-7]{55}$/.test(trimmed);
 
     try {
@@ -1487,11 +1423,9 @@ export default function Explorer() {
     }
   }, [setSearchParams]);
 
-  // Auto-search on mount if URL has a query param
   useEffect(() => {
     const q = searchParams.get("q");
     if (q) handleSearch(q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = () => {
@@ -1501,7 +1435,6 @@ export default function Explorer() {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  // Live stream — only for account searches
   const liveAccountId = state.status === "done" && state.mode === "account" && state.account
     ? state.account.account_id
     : null;
@@ -1581,15 +1514,13 @@ export default function Explorer() {
             )}
           </button>
         </form>
-
-        {/* Example hints */}
         {state.status === "idle" && (
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             {[
               { label: "Example account",  value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
               { label: "USDC asset",       value: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
               { label: "AQUA asset",       value: "AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
-              { label: "Contract scan",   value: "CBIELTK6YBZJU5UP2WWQEUCYKSCVI3OLFBIUWA4REBDWRGXCF4J2L4G3" },
+              { label: "Contract scan",   value: "CA5O6JA2JY7DPDFQ4L3T6OZXO7WBPW5JLP3EMD764MHJFAZXZCCJ7TYD" },
             ].map(({ label, value }) => (
               <button
                 key={value}
@@ -1602,8 +1533,6 @@ export default function Explorer() {
           </div>
         )}
       </div>
-
-      {/* Results & Errors */}
       <AnimatePresence mode="wait">
         {state.status === "error" && (
           state.isRateLimit ? (
@@ -1662,7 +1591,6 @@ export default function Explorer() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="max-w-5xl mx-auto mt-8 w-full"
           >
-            {/* Network ledger bar + stream status — account/asset only */}
             {state.mode !== "contract" && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-foreground/8 bg-sentio-surface/60 px-5 py-3">
                 <div className="flex flex-wrap items-center gap-4 text-xs text-sentio-text-muted">

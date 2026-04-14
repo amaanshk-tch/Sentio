@@ -69,12 +69,9 @@ export async function analyzeContract(contractId, { signal } = {}) {
   const latestLedger = await getLatestLedger({ signal });
   const currentLedger = latestLedger?.sequence ?? 0;
 
-  // Use a 1-hour window (~720 ledgers) — testnet RPC has short event retention
   const startLedger = Math.max(1, currentLedger - 720);
 
   console.log("[analyzer] contractId:", contractId, "startLedger:", startLedger);
-
-  // Get real contract metadata from Stellar Expert (server-side, no CORS)
   const expertData = await fetch(
     `https://api.stellar.expert/explorer/testnet/contract/${contractId}`,
     { signal: signal, headers: { accept: "application/json" } }
@@ -121,7 +118,6 @@ export async function analyzeContract(contractId, { signal } = {}) {
   const eventPatternFlags = detectEventPatterns(events);
   const contractType = detectContractType(events);
 
-  // Use Stellar Expert data if available for accurate metrics
   const invocationCount = expertData?.invocations ?? contractTxs.length;
   const ageDaysFromExpert = expertData?.created 
     ? Math.floor((Date.now() - expertData.created * 1000) / 86_400_000)

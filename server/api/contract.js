@@ -2,7 +2,6 @@ import { analyzeContract } from "../soroban/analyzer.js";
 import { computeContractRisk } from "../soroban/riskEngine.js";
 import { buildInsights, buildSummary, buildRecommendation } from "../soroban/insights.js";
 import { cacheGet, cacheSet } from "../utils/cache.js";
-// registry not used for contract scans — C... addresses unsupported by Soroban Address type
 
 export async function contractScanHandler(req, res) {
   try {
@@ -19,8 +18,6 @@ export async function contractScanHandler(req, res) {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
-      // Contract IDs (C...) cannot be stored in the risk registry
-      // which only accepts G... account addresses — skip onchain lookup
       const onchainData = null;
 
       const data     = await analyzeContract(query, { signal: controller.signal });

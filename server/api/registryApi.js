@@ -40,7 +40,6 @@ export async function flagsHandler(req, res) {
   }
 }
 
-// Step 1: Build unsigned flag transaction — returns XDR for Freighter to sign
 export async function reportHandler(req, res) {
   const { address, reason, severity, signerAddress } = req.body;
   if (!address || !reason || severity === undefined || !signerAddress) {
@@ -60,7 +59,6 @@ export async function reportHandler(req, res) {
     return res.status(400).json({ error: "Severity must be an integer 0-100." });
   }
 
-  // Verify the connected wallet matches the contract admin
   const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
   if (!ADMIN_ADDRESS) {
     return res.status(500).json({ error: "Server admin address not configured." });
@@ -78,7 +76,6 @@ export async function reportHandler(req, res) {
   }
 }
 
-// Step 1: Build unsigned set-risk transaction — returns XDR for Freighter to sign
 export async function setRiskHandler(req, res) {
   const { address, score, confidence, category, signerAddress } = req.body;
   if (!address || score === undefined || confidence === undefined || !category || !signerAddress) {
@@ -97,7 +94,6 @@ export async function setRiskHandler(req, res) {
     return res.status(400).json({ error: "Category must be alphanumeric, max 32 chars." });
   }
 
-  // Verify the connected wallet matches the contract admin
   const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
   if (!ADMIN_ADDRESS) {
     return res.status(500).json({ error: "Server admin address not configured." });
@@ -114,7 +110,6 @@ export async function setRiskHandler(req, res) {
   }
 }
 
-// Step 2: Submit the Freighter-signed transaction to the network
 export async function submitHandler(req, res) {
   const { signedXdr } = req.body;
   if (!signedXdr) return res.status(400).json({ error: "Missing signedXdr." });

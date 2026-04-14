@@ -43,6 +43,9 @@ app.get("/api/registry/flags/:address", flagsHandler);
 
 /* ─── Admin Routes (require admin token) ────────────────────────────────── */
 
+// Verify that the provided admin token is valid
+app.post("/api/registry/verify-token", requireAdminToken, (req, res) => res.json({ valid: true }));
+
 // Verify that a connected wallet is the contract admin
 app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
   const { signerAddress } = req.body;

@@ -22,7 +22,6 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
-  /* Sentio semantic tokens */
   --color-sentio-canvas: hsl(var(--sentio-canvas));
   --color-sentio-elevated: hsl(var(--sentio-elevated));
   --color-sentio-surface: hsl(var(--sentio-surface));
@@ -39,7 +38,6 @@
   --color-sentio-border: hsl(var(--sentio-border));
   --color-sentio-border-strong: hsl(var(--sentio-border-strong));
 
-  /* Sidebar tokens */
   --color-sidebar: hsl(var(--sidebar-background));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -49,45 +47,61 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  /* Border radius */
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  /* Fonts */
   --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
 
-  /* Shadows */
   --shadow-sentio-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sentio-md: 0 4px 24px -4px rgba(0, 0, 0, 0.45);
   --shadow-sentio-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.55);
-  --shadow-sentio-glow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 40px -8px hsl(185 85% 45% / 0.3);
+  --shadow-sentio-glow:
+    0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 40px -8px hsl(185 85% 45% / 0.3);
   --shadow-sentio-glow-accent: 0 0 60px -12px rgba(34, 211, 238, 0.2);
 
-  /* Animations */
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-scale-in: scale-in 0.2s ease-out;
 
   @keyframes accordion-down {
-    from { height: 0; }
-    to { height: var(--radix-accordion-content-height); }
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
   }
   @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height); }
-    to { height: 0; }
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
   }
   @keyframes fade-in {
-    0% { opacity: 0; transform: translateY(10px); }
-    100% { opacity: 1; transform: translateY(0); }
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   @keyframes scale-in {
-    0% { transform: scale(0.95); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 }
-
 
 @layer base {
   :root {
@@ -121,7 +135,6 @@
 
     --radius: 0.75rem;
 
-    /* Sentio semantic tokens */
     --sentio-canvas: 220 20% 3%;
     --sentio-elevated: 220 18% 5%;
     --sentio-surface: 220 16% 8%;
@@ -199,11 +212,13 @@
     color: hsl(var(--sentio-text-muted));
   }
 }
-
-/* Animated grid background */
 @keyframes grid-shift {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(48px, 48px, 0); }
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(48px, 48px, 0);
+  }
 }
 
 .sentio-grid-bg {
@@ -214,10 +229,13 @@
   animation: grid-shift 28s linear infinite;
 }
 
-/* Shimmer loading effect */
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .sentio-shimmer {
@@ -231,15 +249,23 @@
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* Flowing paths animation */
 @keyframes flow-paths {
-  0% { stroke-dashoffset: 1000; }
-  100% { stroke-dashoffset: 0; }
+  0% {
+    stroke-dashoffset: 1000;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes float-gentle {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-8px); }
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 .animate-float {
@@ -247,8 +273,13 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .animate-pulse-glow {
@@ -271,12 +302,17 @@
 }
 
 @keyframes live-beat {
-  0%, 15%, 30%, 45%, 100% {
+  0%,
+  15%,
+  30%,
+  45%,
+  100% {
     transform: scale(1);
     opacity: 0.85;
     filter: brightness(1) drop-shadow(0 0 2px hsl(var(--sentio-success) / 0.5));
   }
-  10%, 25% {
+  10%,
+  25% {
     transform: scale(1.35);
     opacity: 1;
     filter: brightness(1.5) drop-shadow(0 0 8px hsl(var(--sentio-success)));
@@ -288,19 +324,30 @@
 }
 
 @keyframes score-flash {
-  0% { text-shadow: 0 0 0 transparent; }
-  20% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
-  100% { text-shadow: 0 0 0 transparent; }
+  0% {
+    text-shadow: 0 0 0 transparent;
+  }
+  20% {
+    text-shadow:
+      0 0 20px currentColor,
+      0 0 40px currentColor;
+  }
+  100% {
+    text-shadow: 0 0 0 transparent;
+  }
 }
 
 .animate-score-flash {
   animation: score-flash 0.8s ease-out;
 }
 
-/* ─── Glow Button: flowing border light ─────────────────── */
 @keyframes glow-rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .glow-btn {
@@ -314,9 +361,13 @@
   inset: 0;
   border-radius: inherit;
   padding: 1.5px;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   overflow: hidden;
 }

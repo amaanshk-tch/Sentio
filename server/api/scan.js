@@ -42,31 +42,24 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   const onchainHistoryPromise = getOnchainHistory(address);
   const onchainFlagsPromise = getOnchainFlags(address);
 
-  // Recent transactions (last 200)
   const txRecentPromise = fetchJson(
     `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
     { signal }
   ).catch(() => null);
-
-  // Oldest transaction (for account age)
   const txOldestPromise = fetchJson(
     `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
     { signal }
   ).catch(() => null);
 
-  // Recent operations (for counterparty analysis + operation-type breakdown)
   const opsPromise = fetchJson(
     `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
     { signal }
   ).catch(() => null);
-
-  // DEX open offers
   const offersPromise = fetchJson(
     `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
     { signal }
   ).catch(() => null);
 
-  // Claimable balances
   const claimablePromise = fetchJson(
     `${HORIZON_URL}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
     { signal }
@@ -143,7 +136,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
       if (op.to && op.to !== accountId)           counterIds.add(op.to);
       if (op.from && op.from !== accountId)       counterIds.add(op.from);
       if (op.account && op.account !== accountId) counterIds.add(op.account);
-      // Operation-type breakdown
       const opType = op.type || "unknown";
       operationBreakdown[opType] = (operationBreakdown[opType] || 0) + 1;
     }
@@ -161,7 +153,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     counterparties = { total, unique, knownVerified };
   }
 
-  // DEX exposure
   let dexExposure = null;
   if (offersPayload) {
     const offers = Array.isArray(offersPayload?._embedded?.records) ? offersPayload._embedded.records : [];
@@ -173,7 +164,6 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     dexExposure = { openOffers: offers.length, offerAssets: [...offerAssets] };
   }
 
-  // Claimable balances
   let claimableBalances = null;
   if (claimablePayload) {
     const claims = Array.isArray(claimablePayload?._embedded?.records) ? claimablePayload._embedded.records : [];

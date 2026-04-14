@@ -10,8 +10,6 @@ import Admin from "./pages/Admin";
 
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
-// No direct frontend Soroban contract calls; everything routes through /api/registry
-
 const queryClient = new QueryClient();
 
 const App = () => (
