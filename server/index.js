@@ -17,6 +17,7 @@ const server = http.createServer(app);
 const wss    = new WebSocketServer({
   server,
   path: "/ws",
+  maxPayload: 4096,
   verifyClient: ({ origin }, cb) => {
     const allowed = ALLOWED_ORIGIN.some((o) => origin?.startsWith(o));
     cb(allowed, 403, "Forbidden");
@@ -46,11 +47,11 @@ app.use(express.json({ limit: "32kb" }));
 setupWebSocket(wss);
 
 /* ─── Public API Routes ──────────────────────────────────────────────────── */
-app.post("/api/scan", rateLimitMiddleware(30), scanHandler);
-app.post("/api/scan/contract", rateLimitMiddleware(30), contractScanHandler);
+app.post("/api/scan", rateLimitMiddleware("scan", 30), scanHandler);
+app.post("/api/scan/contract", rateLimitMiddleware("scan", 30), contractScanHandler);
 
-app.get("/api/registry/history/:address", historyHandler);
-app.get("/api/registry/flags/:address", flagsHandler);
+app.get("/api/registry/history/:address", rateLimitMiddleware("registry-read", 60), historyHandler);
+app.get("/api/registry/flags/:address", rateLimitMiddleware("registry-read", 60), flagsHandler);
 
 /* ─── Admin Routes (require admin token) ────────────────────────────────── */
 
@@ -67,10 +68,10 @@ app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
   return res.json({ authorized: true });
 });
 
-app.post("/api/registry/report",   requireAdminToken, rateLimitMiddleware(10), reportHandler);
-app.post("/api/registry/set-risk", requireAdminToken, setRiskHandler);
+app.post("/api/registry/report",   requireAdminToken, rateLimitMiddleware("admin-write", 5), reportHandler);
+app.post("/api/registry/set-risk", requireAdminToken, rateLimitMiddleware("admin-write", 5), setRiskHandler);
 
-app.post("/api/registry/submit", requireAdminToken, rateLimitMiddleware(10), submitHandler);
+app.post("/api/registry/submit", requireAdminToken, rateLimitMiddleware("admin-write", 5), submitHandler);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 

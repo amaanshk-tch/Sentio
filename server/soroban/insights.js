@@ -47,7 +47,7 @@ export function buildSummary(data, risk) {
 }
 
 export function buildRecommendation(score) {
-  if (score > 75) return "Avoid interacting with this contract until it has established more on-chain history and usage.";
-  if (score >= 50) return "Proceed with caution. Verify the deployer's identity and review the contract's source before committing assets.";
+  if (score < 30) return "Avoid interacting with this contract — multiple high-risk signals detected.";
+  if (score < 70) return "Proceed with caution. Verify the deployer's identity and review the contract source before committing assets.";
   return "This contract shows healthy signals. Standard due diligence still applies before large transactions.";
 }

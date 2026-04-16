@@ -140,7 +140,6 @@ function useLiveStream(
       try {
         const msg = JSON.parse(ev.data as string);
         if (msg.type === "update") {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { type: _t, newTx, ...scanPatch } = msg;
           if (newTx?.id) setLastTxId(newTx.id as string);
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
@@ -190,6 +189,16 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:";
+  } catch { return false; }
+}
+
+function isSafeHostname(domain: string): boolean {
+  return /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(domain);
+}
 
 function deriveRiskLabel(score: number): { label: string; color: string; bg: string; border: string } {
   if (score <= 20) return { label: "Safe",      color: "text-sentio-success",  bg: "bg-sentio-success/10",  border: "border-sentio-success/30" };
@@ -659,7 +668,7 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
                 </a>
               </div>
             </div>
-            {account.home_domain && (
+            {account.home_domain && isSafeHostname(account.home_domain) && (
               <div className="mt-3 flex items-center gap-2 text-sm text-primary">
                 <Globe className="h-4 w-4" />
                 <a href={`https://${account.home_domain}`} target="_blank" rel="noopener noreferrer" className="hover:underline font-medium">
@@ -1040,7 +1049,7 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
               </div>
             </div>
           </div>
-          {asset._links?.toml?.href && (
+          {asset._links?.toml?.href && isSafeUrl(asset._links.toml.href) && (
             <a
               href={asset._links.toml.href}
               target="_blank"
@@ -1134,7 +1143,6 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
 }
 
 function ContractPanel({ result }: { result: ContractScanResult }) {
-  // Contract score is INVERTED, 100 = safe, 0 = critical
   const contractRiskStyle = {
     "Low Risk":    { color: "text-sentio-success",  bg: "bg-sentio-success/10",  border: "border-sentio-success/30" },
     "Medium Risk": { color: "text-sentio-warning",  bg: "bg-sentio-warning/10",  border: "border-sentio-warning/30" },
@@ -1439,7 +1447,6 @@ export default function Explorer() {
   useEffect(() => {
     const q = searchParams.get("q");
     if (q) handleSearch(q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = () => {
@@ -1495,7 +1502,6 @@ export default function Explorer() {
         </p>
       </div>
 
-      {/* Search bar */}
       <div className="mb-10 max-w-2xl mx-auto">
         <form
           onSubmit={(e) => { e.preventDefault(); handleSearch(query); }}

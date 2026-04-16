@@ -23,7 +23,8 @@ export async function historyHandler(req, res) {
     const history = await getOnchainHistory(address);
     return res.json({ history });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[historyHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
@@ -36,7 +37,8 @@ export async function flagsHandler(req, res) {
     const flags = await getOnchainFlags(address);
     return res.json({ flags });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[flagsHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
@@ -71,8 +73,8 @@ export async function reportHandler(req, res) {
     const unsignedXdr = await buildFlagTransaction(signerAddress, address, reason, sev);
     return res.json({ unsignedXdr });
   } catch (err) {
-    console.error("[reportHandler] buildFlagTransaction failed:", err);
-    return res.status(500).json({ error: err.message });
+    console.error("[reportHandler error] buildFlagTransaction failed:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
@@ -106,7 +108,8 @@ export async function setRiskHandler(req, res) {
     const unsignedXdr = await buildSetRiskTransaction(signerAddress, address, s, c, category);
     return res.json({ unsignedXdr });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[setRiskHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
@@ -117,6 +120,7 @@ export async function submitHandler(req, res) {
     const result = await submitSignedTransaction(signedXdr);
     return result.success ? res.json(result) : res.status(400).json(result);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[submitHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }

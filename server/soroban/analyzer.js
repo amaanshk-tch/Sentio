@@ -87,10 +87,20 @@ export async function analyzeContract(contractId, { signal } = {}) {
     }),
   ]);
 
+  const contractTxHashes = new Set(events.map((e) => e.txHash).filter(Boolean));
+
   const contractTxs = transactions.filter((tx) => {
     if (!tx) return false;
-    const str = JSON.stringify(tx);
-    return str.includes(contractId);
+    
+    if (Array.isArray(tx.operations)) {
+      return tx.operations.some((op) =>
+        (op.type === "invokeHostFunction" || op.type === "invoke_host_function") &&
+        op.function?.contractId === contractId
+      );
+    }
+    
+    const txHash = tx.hash || tx.txHash || tx.id;
+    return txHash && contractTxHashes.has(txHash);
   });
 
   const callerSet = new Set();
