@@ -15,10 +15,10 @@ export function setupWebSocket(wss) {
       return;
     }
 
-    const ip =
-      req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
-      req.socket.remoteAddress ||
-      "unknown";
+    let ip = req.socket.remoteAddress || "unknown";
+    if (process.env.TRUST_PROXY) {
+      ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || ip;
+    }
 
     const ipCount = ipConnectionCount.get(ip) ?? 0;
     if (ipCount >= MAX_PER_IP) {

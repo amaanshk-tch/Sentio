@@ -300,6 +300,25 @@ export async function submitSignedTransaction(signedXdr) {
   try {
     const { TransactionBuilder: TB } = await import("@stellar/stellar-sdk");
     const tx = TB.fromXDR(signedXdr, NETWORK_PASSPHRASE);
+    
+    // Validate: ensure every operation targets our contract
+    const ops = tx.operations;
+    const isValid = ops.every(op => {
+      if (op.type !== "invokeHostFunction") return false;
+      
+      // Try to check the target contract ID (stellar-sdk parses this out into op.func in some versions)
+      // We check if it's our contract, but also allow fallback if the specific path isn't mapped
+      // purely to prevent someone from sending arbitrary payments, issuing assets, etc.
+      if (op.func && op.func.contractId) {
+        if (op.func.contractId !== CONTRACT_ID) return false;
+      }
+      return true;
+    });
+
+    if (!isValid) {
+      return { success: false, reason: "Forbidden: Transaction contains operations not targeting the risk registry contract." };
+    }
+
     const response = await rpcServer.sendTransaction(tx);
     if (response.status === "PENDING" || response.status === "SUCCESS") {
       return { success: true, hash: response.hash };

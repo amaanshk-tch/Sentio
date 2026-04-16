@@ -23,7 +23,12 @@ const wss    = new WebSocketServer({
   },
 });
 
-app.set("trust proxy", 1);
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) {
+  app.set("trust proxy", trustProxy === "true" ? 1 : (trustProxy === "1" ? 1 : trustProxy));
+} else {
+  app.set("trust proxy", false);
+}
 app.use(helmet());
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN
