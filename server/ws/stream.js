@@ -1,10 +1,34 @@
 import { HORIZON_URL, isAccount } from "../utils/stellarContext.js";
 import { runScan } from "../api/scan.js";
 
-const STREAM_TTL_MS = 5 * 60 * 1000;
+const STREAM_TTL_MS    = 5 * 60 * 1000;
+const MAX_CONNECTIONS  = 100;
+const MAX_PER_IP       = 5;
+
+let activeConnections = 0;
+const ipConnectionCount = new Map();
 
 export function setupWebSocket(wss) {
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    if (activeConnections >= MAX_CONNECTIONS) {
+      ws.close(1008, "Too many connections");
+      return;
+    }
+
+    const ip =
+      req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
+      req.socket.remoteAddress ||
+      "unknown";
+
+    const ipCount = ipConnectionCount.get(ip) ?? 0;
+    if (ipCount >= MAX_PER_IP) {
+      ws.close(1008, "Too many connections from your IP");
+      return;
+    }
+
+    activeConnections++;
+    ipConnectionCount.set(ip, ipCount + 1);
+
     let horizonReader    = null;
     let streamController = null;
     let killTimer        = null;
@@ -94,7 +118,18 @@ export function setupWebSocket(wss) {
       } catch {}
     });
 
-    ws.on("close", cleanup);
-    ws.on("error", cleanup);
+    function releaseConnection() {
+      cleanup();
+      activeConnections = Math.max(0, activeConnections - 1);
+      const current = ipConnectionCount.get(ip) ?? 1;
+      if (current <= 1) {
+        ipConnectionCount.delete(ip);
+      } else {
+        ipConnectionCount.set(ip, current - 1);
+      }
+    }
+
+    ws.on("close", releaseConnection);
+    ws.on("error", releaseConnection);
   });
 }

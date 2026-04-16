@@ -14,7 +14,14 @@ import { setupWebSocket } from "./ws/stream.js";
 
 const app    = express();
 const server = http.createServer(app);
-const wss    = new WebSocketServer({ server, path: "/ws" });
+const wss    = new WebSocketServer({
+  server,
+  path: "/ws",
+  verifyClient: ({ origin }, cb) => {
+    const allowed = ALLOWED_ORIGIN.some((o) => origin?.startsWith(o));
+    cb(allowed, 403, "Forbidden");
+  },
+});
 
 app.set("trust proxy", 1);
 app.use(helmet());
