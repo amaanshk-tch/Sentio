@@ -22,7 +22,7 @@ export function parseAsset(s) {
 
 export function normalizeQuery(raw) {
   if (typeof raw !== "string") return "";
-  let q = raw.trim().replace(/[\s\u200B-\u200D\uFEFF]/g, "");
+  let q = raw.trim().normalize("NFKC").replace(/[^\x20-\x7E]/g, "").replace(/\s/g, "");
   if (q.includes(":")) { const [c, ...r] = q.split(":"); q = `${c.toUpperCase()}:${r.join(":")}`; }
   return q;
 }

@@ -40,6 +40,15 @@ export async function verifyHomeDomain(homeDomain, accountId) {
   if (!domain || domain.includes(" ") || domain.includes("@"))
     return { homeDomain: domain || null, verified: false, tomlFields: {} };
 
+  function isSafeExternalDomain(d) {
+    const forbidden = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/;
+    return !forbidden.test(d) && !d.includes("..") && d.includes(".");
+  }
+
+  if (!isSafeExternalDomain(domain)) {
+    return { homeDomain: domain, verified: false, tomlFields: {} };
+  }
+
   const url = `https://${domain}/.well-known/stellar.toml`;
   try {
     const controller = new AbortController();

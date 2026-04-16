@@ -15,6 +15,19 @@ import {
 } from "../riskEngine.js";
 import { getOnchainRisk, setOnchainRisk, getOnchainHistory, getOnchainFlags } from "../soroban/registry.js";
 
+// Throttle onchain writes to at most once per 10 minutes per address,
+// preventing XLM drain from burst scan traffic.
+const ONCHAIN_WRITE_COOLDOWN_MS = 10 * 60 * 1000;
+const onchainWriteTimestamps = new Map();
+
+function shouldWriteOnchain(address) {
+  const now = Date.now();
+  const last = onchainWriteTimestamps.get(address) ?? 0;
+  if (now - last < ONCHAIN_WRITE_COOLDOWN_MS) return false;
+  onchainWriteTimestamps.set(address, now);
+  return true;
+}
+
 export async function runScan(query, { signal, prevScore = null } = {}) {
   const asset   = parseAsset(query);
   const isAsset = Boolean(asset);
@@ -233,12 +246,12 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
 
   const confidence = computeConfidence({ walletData, txRecentCount });
 
-  if (!isAsset && riskResult.score !== onchainData?.score) {
+  if (!isAsset && riskResult.score !== onchainData?.score && shouldWriteOnchain(address)) {
     setOnchainRisk(address, {
       score: riskResult.score,
       confidence,
       category: riskResult.risk
-    }).catch((e) => 
+    }).catch((e) =>
       console.error("[Sentio] On-chain risk logging failed:", e?.message)
     );
   }
