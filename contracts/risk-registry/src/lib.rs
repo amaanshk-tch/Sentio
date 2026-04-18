@@ -22,7 +22,6 @@ pub struct Flag {
     pub timestamp: u64,
 }
 
-// Optimized circular buffer for bounded lists (history and flags)
 #[contracttype]
 #[derive(Clone)]
 pub struct RiskRingBuffer {
@@ -88,17 +87,19 @@ impl RiskRegistry {
 
         let risk_key = DataKey::Risk(addr.clone());
         env.storage().persistent().set(&risk_key, &data);
-        env.storage().persistent().extend_ttl(&risk_key, MIN_TTL, EXTEND_TTL);
+        env.storage()
+            .persistent()
+            .extend_ttl(&risk_key, MIN_TTL, EXTEND_TTL);
 
         let hist_key = DataKey::RiskHistory(addr.clone());
-        let mut rings: RiskRingBuffer = env
-            .storage()
-            .persistent()
-            .get(&hist_key)
-            .unwrap_or(RiskRingBuffer {
-                head: 0,
-                items: Vec::new(&env),
-            });
+        let mut rings: RiskRingBuffer =
+            env.storage()
+                .persistent()
+                .get(&hist_key)
+                .unwrap_or(RiskRingBuffer {
+                    head: 0,
+                    items: Vec::new(&env),
+                });
 
         if rings.items.len() < 50 {
             rings.items.push_back(data.clone());
@@ -108,7 +109,9 @@ impl RiskRegistry {
         }
 
         env.storage().persistent().set(&hist_key, &rings);
-        env.storage().persistent().extend_ttl(&hist_key, MIN_TTL, EXTEND_TTL);
+        env.storage()
+            .persistent()
+            .extend_ttl(&hist_key, MIN_TTL, EXTEND_TTL);
 
         env.events()
             .publish((Symbol::new(&env, "risk_updated"), addr.clone()), score);
@@ -117,10 +120,15 @@ impl RiskRegistry {
     pub fn get_risk(env: Env, addr: Address) -> Option<RiskData> {
         let key = DataKey::Risk(addr.clone());
         if env.storage().persistent().has(&key) {
-            env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, MIN_TTL, EXTEND_TTL);
             env.storage().persistent().get(&key)
         } else {
-            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "risk"));
+            env.events().publish(
+                (Symbol::new(&env, "expiry_miss"), addr),
+                Symbol::new(&env, "risk"),
+            );
             None
         }
     }
@@ -128,19 +136,23 @@ impl RiskRegistry {
     pub fn get_history(env: Env, addr: Address) -> Vec<RiskData> {
         let key = DataKey::RiskHistory(addr.clone());
         if !env.storage().persistent().has(&key) {
-            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "history"));
+            env.events().publish(
+                (Symbol::new(&env, "expiry_miss"), addr),
+                Symbol::new(&env, "history"),
+            );
             return Vec::new(&env);
         }
-        env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, MIN_TTL, EXTEND_TTL);
         let rings: RiskRingBuffer = env.storage().persistent().get(&key).unwrap();
-        
+
         let mut ordered = Vec::new(&env);
         if rings.items.len() < 50 {
             for item in rings.items.iter() {
                 ordered.push_back(item);
             }
         } else {
-            // Chronological order: head to 49, then 0 to head-1
             for i in rings.head..50 {
                 ordered.push_back(rings.items.get(i).unwrap());
             }
@@ -155,17 +167,21 @@ impl RiskRegistry {
         let admin = Self::get_admin(&env);
         admin.require_auth();
 
+        if severity > 100 {
+            panic!("Severity must be between 0 and 100");
+        }
+
         let timestamp = env.ledger().timestamp();
         let flag_key = DataKey::Flags(addr.clone());
 
-        let mut rings: FlagRingBuffer = env
-            .storage()
-            .persistent()
-            .get(&flag_key)
-            .unwrap_or(FlagRingBuffer {
-                head: 0,
-                items: Vec::new(&env),
-            });
+        let mut rings: FlagRingBuffer =
+            env.storage()
+                .persistent()
+                .get(&flag_key)
+                .unwrap_or(FlagRingBuffer {
+                    head: 0,
+                    items: Vec::new(&env),
+                });
 
         let new_flag = Flag {
             reason,
@@ -181,7 +197,9 @@ impl RiskRegistry {
         }
 
         env.storage().persistent().set(&flag_key, &rings);
-        env.storage().persistent().extend_ttl(&flag_key, MIN_TTL, EXTEND_TTL);
+        env.storage()
+            .persistent()
+            .extend_ttl(&flag_key, MIN_TTL, EXTEND_TTL);
 
         env.events()
             .publish((Symbol::new(&env, "risk_flagged"), addr), severity);
@@ -190,12 +208,17 @@ impl RiskRegistry {
     pub fn get_flags(env: Env, addr: Address) -> Vec<Flag> {
         let key = DataKey::Flags(addr.clone());
         if !env.storage().persistent().has(&key) {
-            env.events().publish((Symbol::new(&env, "expiry_miss"), addr), Symbol::new(&env, "flags"));
+            env.events().publish(
+                (Symbol::new(&env, "expiry_miss"), addr),
+                Symbol::new(&env, "flags"),
+            );
             return Vec::new(&env);
         }
-        env.storage().persistent().extend_ttl(&key, MIN_TTL, EXTEND_TTL);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, MIN_TTL, EXTEND_TTL);
         let rings: FlagRingBuffer = env.storage().persistent().get(&key).unwrap();
-        
+
         let mut ordered = Vec::new(&env);
         if rings.items.len() < 50 {
             for item in rings.items.iter() {
@@ -222,7 +245,11 @@ impl RiskRegistry {
     pub fn remove_risk(env: Env, addr: Address) {
         let admin = Self::get_admin(&env);
         admin.require_auth();
-        env.storage().persistent().remove(&DataKey::Risk(addr.clone()));
-        env.storage().persistent().remove(&DataKey::RiskHistory(addr));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Risk(addr.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::RiskHistory(addr));
     }
 }

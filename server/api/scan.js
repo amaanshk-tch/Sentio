@@ -1,9 +1,9 @@
-import { 
-  HORIZON_URL, 
-  fetchJson, 
-  parseAsset, 
-  isAccount, 
-  normalizeQuery 
+import {
+  HORIZON_URL as activeHorizon,
+  fetchJson,
+  parseAsset,
+  isAccount,
+  normalizeQuery,
 } from "../utils/stellarContext.js";
 import { cacheGet, cacheSet } from "../utils/cache.js";
 import {
@@ -38,43 +38,41 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   
   let assetPromise = Promise.resolve(null);
   if (isAsset) {
-    address = asset.raw;
     assetPromise = fetchJson(
-      `${HORIZON_URL}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
+      `${activeHorizon}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
       { signal }
     ).catch(() => null);
   }
 
-  const accountPromise = fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
+  const accountPromise = fetchJson(`${activeHorizon}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
 
   const domainPromise = accountPromise.then((acc) => 
     verifyHomeDomain(acc?.home_domain || null, accountId)
   ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
 
-  const onchainRiskPromise = getOnchainRisk(address);
-  const onchainHistoryPromise = getOnchainHistory(address);
-  const onchainFlagsPromise = getOnchainFlags(address);
+  const onchainHistoryPromise = getOnchainHistory(accountId);
+  const onchainFlagsPromise   = getOnchainFlags(accountId);
 
   const txRecentPromise = fetchJson(
-    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
+    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
     { signal }
   ).catch(() => null);
   const txOldestPromise = fetchJson(
-    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
+    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
     { signal }
   ).catch(() => null);
 
   const opsPromise = fetchJson(
-    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
+    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
     { signal }
   ).catch(() => null);
   const offersPromise = fetchJson(
-    `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
+    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
     { signal }
   ).catch(() => null);
 
   const claimablePromise = fetchJson(
-    `${HORIZON_URL}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
+    `${activeHorizon}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
     { signal }
   ).catch(() => null);
 
@@ -159,7 +157,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     const cpIds = [...counterIds].slice(0, 5);
     await Promise.all(cpIds.map(async (id) => {
       try {
-        const acc = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(id)}`, { signal });
+        const acc = await fetchJson(`${activeHorizon}/accounts/${encodeURIComponent(id)}`, { signal });
         if (acc?.home_domain) knownVerified++;
       } catch {}
     }));
@@ -277,7 +275,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     onchainRiskData: onchainData,
     onchainHistory: onchainHistory,
     onchainFlags: onchainFlags,
-    raw: { horizon: HORIZON_URL, accountId },
+    raw: { horizon: activeHorizon, accountId },
   };
 }
 

@@ -146,48 +146,7 @@ export async function getOnchainHistory(address) {
   }
 }
 
-export async function flagOnchain(adminSecret, address, reason, severity) {
-  if (!CONTRACT_ID) return { success: false, reason: "No contract configured" };
 
-  try {
-    const adminKp = Keypair.fromSecret(adminSecret);
-    const contract = new Contract(CONTRACT_ID);
-    
-    const sourceAccount = await loadAccount(adminKp.publicKey());
-    
-    const tx = new TransactionBuilder(sourceAccount, {
-      fee: "1000",
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(contract.call(
-        "flag",
-        nativeToScVal(address, { type: 'address' }),
-        nativeToScVal(reason, { type: 'string' }),
-        nativeToScVal(severity, { type: 'u32' })
-      ))
-      .setTimeout(30)
-      .build();
-
-    const sim = await rpcServer.simulateTransaction(tx);
-    if (!rpc.Api.isSimulationSuccess(sim)) {
-      console.error("[Onchain] flag Simulation failed:", sim);
-      return { success: false, reason: "Simulation failed" };
-    }
-
-    const assembledTx = rpc.assembleTransaction(tx, sim).build();
-    assembledTx.sign(adminKp);
-
-    const response = await rpcServer.sendTransaction(assembledTx);
-    if (response.status === "PENDING" || response.status === "SUCCESS") {
-      return { success: true, hash: response.hash };
-    }
-    
-    return { success: false, reason: response.status };
-  } catch (err) {
-    console.error("[Onchain] flag failed:", err.message);
-    return { success: false, reason: err.message };
-  }
-}
 
 export async function getOnchainFlags(address) {
   if (!CONTRACT_ID) return [];

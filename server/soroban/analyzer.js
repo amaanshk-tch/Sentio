@@ -1,5 +1,5 @@
 import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
-import { HORIZON_URL } from "../config.js";
+import { HORIZON_URL, HORIZON_MAINNET_URL, SOROBAN_RPC_URL, SOROBAN_RPC_MAINNET_URL } from "../config.js";
 
 async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });
@@ -47,14 +47,15 @@ function detectEventPatterns(events) {
   return flags;
 }
 
-async function analyzeDeployer(deployerAccount, { signal } = {}) {
+async function analyzeDeployer(deployerAccount, { signal, network = "testnet" } = {}) {
+  const horizonUrl = network === "mainnet" ? HORIZON_MAINNET_URL : HORIZON_URL;
   if (!deployerAccount) return { deployerAccount: null, deployerDomainVerified: false, deployerAgeDays: null };
   try {
-    const acc = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(deployerAccount)}`, { signal });
+    const acc = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}`, { signal });
     const homeDomain = acc?.home_domain || null;
     const deployerDomainVerified = Boolean(homeDomain);
 
-    const txRes = await fetchJson(`${HORIZON_URL}/accounts/${encodeURIComponent(deployerAccount)}/transactions?order=asc&limit=1`, { signal });
+    const txRes = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}/transactions?order=asc&limit=1`, { signal });
     const oldest = txRes?._embedded?.records?.[0];
     const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
     const deployerAgeDays = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((Date.now() - oldestAt) / 86_400_000)) : null;
@@ -65,23 +66,29 @@ async function analyzeDeployer(deployerAccount, { signal } = {}) {
   }
 }
 
-export async function analyzeContract(contractId, { signal } = {}) {
-  const latestLedger = await getLatestLedger({ signal });
-  const currentLedger = latestLedger?.sequence ?? 0;
+export async function analyzeContract(contractId, { signal, network = "testnet" } = {}) {
+  const isMainnet  = network === "mainnet";
+  const rpcUrl     = isMainnet ? SOROBAN_RPC_MAINNET_URL : SOROBAN_RPC_URL;
+  const expertNet  = isMainnet ? "public" : "testnet";
 
-  const startLedger = Math.max(1, currentLedger - 720);
+  const latestLedger = await getLatestLedger({ signal, rpcUrl });
+  const currentLedger = latestLedger?.sequence ?? 0;
+  const startLedger   = Math.max(1, currentLedger - 720);
 
   console.log("[analyzer] contractId:", contractId, "startLedger:", startLedger);
+
   const expertData = await fetch(
-    `https://api.stellar.expert/explorer/testnet/contract/${contractId}`,
-    { signal: signal, headers: { accept: "application/json" } }
+    `https://api.stellar.expert/explorer/${expertNet}/contract/${contractId}`,
+    { signal, headers: { accept: "application/json" } }
   ).then(r => r.ok ? r.json() : null).catch(() => null);
 
-  console.log("[analyzer] expertData:", JSON.stringify(expertData));
+  if (process.env.LOG_LEVEL === "debug") {
+    console.log("[analyzer] expertData:", JSON.stringify(expertData));
+  }
 
   const [transactions, events] = await Promise.all([
-    getTransactions(startLedger, { signal, limit: 200 }),
-    getEvents(startLedger, contractId, { signal, limit: 100 }).catch((e) => {
+    getTransactions(startLedger, { signal, limit: 200, rpcUrl }),
+    getEvents(startLedger, contractId, { signal, limit: 100, rpcUrl }).catch((e) => {
       console.warn("[analyzer] getEvents failed:", e.message);
       return [];
     }),
@@ -91,14 +98,12 @@ export async function analyzeContract(contractId, { signal } = {}) {
 
   const contractTxs = transactions.filter((tx) => {
     if (!tx) return false;
-    
     if (Array.isArray(tx.operations)) {
       return tx.operations.some((op) =>
         (op.type === "invokeHostFunction" || op.type === "invoke_host_function") &&
         op.function?.contractId === contractId
       );
     }
-    
     const txHash = tx.hash || tx.txHash || tx.id;
     return txHash && contractTxHashes.has(txHash);
   });
@@ -116,20 +121,20 @@ export async function analyzeContract(contractId, { signal } = {}) {
   const maxCallerCount = Math.max(0, ...Object.values(callerCounts));
   const dominantCallerRatio = contractTxs.length > 0 ? maxCallerCount / contractTxs.length : 0;
 
-  const txLedgers = contractTxs.map((tx) => Number(tx.ledger || 0)).filter(Boolean);
+  const txLedgers    = contractTxs.map((tx) => Number(tx.ledger || 0)).filter(Boolean);
   const eventLedgers = events.map((e) => Number(e.ledger || 0)).filter(Boolean);
-  const firstSeen = Math.min(currentLedger + 1, ...txLedgers, ...eventLedgers);
-  const ledgersOld = firstSeen < currentLedger ? currentLedger - firstSeen : 0;
-  const ageDays = Math.floor(ledgersOld / (5 * 60 * 24));
+  const firstSeen    = Math.min(currentLedger + 1, ...txLedgers, ...eventLedgers);
+  const ledgersOld   = firstSeen < currentLedger ? currentLedger - firstSeen : 0;
+  const ageDays      = Math.floor(ledgersOld / (5 * 60 * 24));
 
-  const firstCallerSource = contractTxs.length > 0 ? contractTxs[contractTxs.length - 1]?.sourceAccount : null;
-  const deployerInfo = await analyzeDeployer(firstCallerSource, { signal });
+  const actualDeployer  = expertData?.creator || expertData?.deployer || null;
+  const deployerInfo    = await analyzeDeployer(actualDeployer, { signal, network });
   const eventCategories = categorizeEvents(events);
   const eventPatternFlags = detectEventPatterns(events);
-  const contractType = detectContractType(events);
+  const contractType    = detectContractType(events);
 
-  const invocationCount = expertData?.invocations ?? contractTxs.length;
-  const ageDaysFromExpert = expertData?.created 
+  const invocationCount  = expertData?.invocations ?? contractTxs.length;
+  const ageDaysFromExpert = expertData?.created
     ? Math.floor((Date.now() - expertData.created * 1000) / 86_400_000)
     : ageDays;
 

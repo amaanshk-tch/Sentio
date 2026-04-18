@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, Copy } from "lucide-react";
 import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
 
 export default function Admin() {
   const [token, setToken]       = useState("");
+  const tokenRef                = useRef("");
   const [unlocked, setUnlocked] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -22,6 +23,8 @@ export default function Admin() {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
+        tokenRef.current = token;
+        setToken("");
         setUnlocked(true);
         toast.success("Dashboard unlocked.");
       } else {
@@ -49,7 +52,7 @@ export default function Admin() {
 
       const res = await fetch("/api/registry/verify-admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ signerAddress: data.address }),
       });
       const result = await res.json();
@@ -73,12 +76,13 @@ export default function Admin() {
 
   const signAndSubmit = async (unsignedXdr: string): Promise<{ hash: string } | null> => {
     try {
-      const result = await signTransaction(unsignedXdr, { networkPassphrase: "Test SDF Network ; September 2015" });
+      const NETWORK_PASSPHRASE = import.meta.env.VITE_STELLAR_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015";
+      const result = await signTransaction(unsignedXdr, { networkPassphrase: NETWORK_PASSPHRASE });
       if (!result?.signedTxXdr) throw new Error("Freighter did not return a signed transaction.");
 
       const submitRes = await fetch("/api/registry/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ signedXdr: result.signedTxXdr }),
       });
       const submitData = await submitRes.json();
@@ -94,6 +98,7 @@ export default function Admin() {
   const [riskConfidence, setRiskConfidence] = useState(50);
   const [riskCategory, setRiskCategory]     = useState("unknown");
   const [isSettingRisk, setIsSettingRisk]   = useState(false);
+  const [lastRiskHash, setLastRiskHash]     = useState<string | null>(null);
 
   const handleSetRisk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +107,7 @@ export default function Admin() {
     try {
       const res = await fetch("/api/registry/set-risk", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({
           address: riskAddress, score: riskScore,
           confidence: riskConfidence, category: riskCategory,
@@ -117,8 +122,9 @@ export default function Admin() {
 
       const submitted = await signAndSubmit(data.unsignedXdr);
       if (submitted) {
-        toast.success(`Risk set! Hash: ${submitted.hash}`);
+        toast.success(`Risk set successfully!`);
         setRiskAddress("");
+        setLastRiskHash(submitted.hash);
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to set risk.");
@@ -131,6 +137,7 @@ export default function Admin() {
   const [flagReason, setFlagReason]     = useState("suspicious");
   const [flagSeverity, setFlagSeverity] = useState(50);
   const [isFlagging, setIsFlagging]     = useState(false);
+  const [lastFlagHash, setLastFlagHash] = useState<string | null>(null);
 
   const handleFlag = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +146,7 @@ export default function Admin() {
     try {
       const res = await fetch("/api/registry/report", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({
           address: flagAddress, reason: flagReason,
           severity: flagSeverity, signerAddress: walletAddress,
@@ -153,8 +160,9 @@ export default function Admin() {
 
       const submitted = await signAndSubmit(data.unsignedXdr);
       if (submitted) {
-        toast.success(`Flagged! Hash: ${submitted.hash}`);
+        toast.success(`Flagged successfully!`);
         setFlagAddress("");
+        setLastFlagHash(submitted.hash);
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to flag.");
@@ -241,7 +249,6 @@ export default function Admin() {
               <p className="text-sentio-success flex items-center gap-2">
                 <Lock className="h-4 w-4" /> Authenticated
               </p>
-              {/* Gate 2 — Wallet verification status */}
               {!walletAddress ? (
                 <p className="text-sentio-text-muted flex items-center gap-2">
                   <Wallet className="h-4 w-4" />
@@ -258,7 +265,7 @@ export default function Admin() {
               )}
             </div>
             <button
-              onClick={() => { setToken(""); setUnlocked(false); setWalletAddress(null); setWalletVerified(false); }}
+              onClick={() => { setToken(""); tokenRef.current = ""; setUnlocked(false); setWalletAddress(null); setWalletVerified(false); }}
               className="text-xs text-sentio-text-muted hover:text-foreground transition-colors"
             >
               Sign out
@@ -322,6 +329,22 @@ export default function Admin() {
                   className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
                   {isSettingRisk ? "Waiting for Freighter..." : "Save Risk Assessment"}
                 </button>
+                {lastRiskHash && (
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-sentio-success/20 bg-sentio-success/10 p-3">
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-bold text-sentio-success uppercase tracking-wider mb-0.5">Transaction Hash</span>
+                      <span className="truncate font-mono text-xs text-sentio-text-secondary" title={lastRiskHash}>{lastRiskHash}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(lastRiskHash); toast.success("Hash copied!"); }}
+                      className="shrink-0 rounded-lg p-2 text-sentio-success hover:bg-sentio-success/20 transition"
+                      title="Copy Hash"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
 
@@ -355,6 +378,22 @@ export default function Admin() {
                   className="mt-2 w-full rounded-xl bg-sentio-warning px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
                   {isFlagging ? "Waiting for Freighter..." : "Submit Flag"}
                 </button>
+                {lastFlagHash && (
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-sentio-success/20 bg-sentio-success/10 p-3">
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-bold text-sentio-success uppercase tracking-wider mb-0.5">Transaction Hash</span>
+                      <span className="truncate font-mono text-xs text-sentio-text-secondary" title={lastFlagHash}>{lastFlagHash}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(lastFlagHash); toast.success("Hash copied!"); }}
+                      className="shrink-0 rounded-lg p-2 text-sentio-success hover:bg-sentio-success/20 transition"
+                      title="Copy Hash"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </div>

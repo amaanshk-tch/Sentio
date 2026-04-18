@@ -19,8 +19,9 @@ export async function historyHandler(req, res) {
   if (!address || !isValidAddress(address)) {
     return res.status(400).json({ error: "Invalid address format." });
   }
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
   try {
-    const history = await getOnchainHistory(address);
+    const history = await getOnchainHistory(targetAddress);
     return res.json({ history });
   } catch (err) {
     console.error("[historyHandler error]", err);
@@ -33,8 +34,9 @@ export async function flagsHandler(req, res) {
   if (!address || !isValidAddress(address)) {
     return res.status(400).json({ error: "Invalid address format." });
   }
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
   try {
-    const flags = await getOnchainFlags(address);
+    const flags = await getOnchainFlags(targetAddress);
     return res.json({ flags });
   } catch (err) {
     console.error("[flagsHandler error]", err);
@@ -69,8 +71,10 @@ export async function reportHandler(req, res) {
     return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
   }
 
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
+
   try {
-    const unsignedXdr = await buildFlagTransaction(signerAddress, address, reason, sev);
+    const unsignedXdr = await buildFlagTransaction(signerAddress, targetAddress, reason, sev);
     return res.json({ unsignedXdr });
   } catch (err) {
     console.error("[reportHandler error] buildFlagTransaction failed:", err);
@@ -104,8 +108,10 @@ export async function setRiskHandler(req, res) {
     return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
   }
 
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
+
   try {
-    const unsignedXdr = await buildSetRiskTransaction(signerAddress, address, s, c, category);
+    const unsignedXdr = await buildSetRiskTransaction(signerAddress, targetAddress, s, c, category);
     return res.json({ unsignedXdr });
   } catch (err) {
     console.error("[setRiskHandler error]", err);

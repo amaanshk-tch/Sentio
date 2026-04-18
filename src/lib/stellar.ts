@@ -1,5 +1,12 @@
 
-const HORIZON = "https://horizon.stellar.org";
+export type NetworkType = "mainnet" | "testnet";
+
+const MAINNET_HORIZON = "https://horizon.stellar.org";
+const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
+
+function getHorizonUrl(network: NetworkType = "testnet") {
+  return network === "mainnet" ? MAINNET_HORIZON : TESTNET_HORIZON;
+}
 
 export interface HorizonAccount {
   id: string;
@@ -111,8 +118,8 @@ function parseAssetInput(input: string): { code: string; issuer?: string } | nul
   return null;
 }
 
-export async function fetchAccount(address: string): Promise<HorizonAccount> {
-  const res = await fetch(`${HORIZON}/accounts/${address.trim()}`);
+export async function fetchAccount(address: string, network: NetworkType = "testnet"): Promise<HorizonAccount> {
+  const res = await fetch(`${getHorizonUrl(network)}/accounts/${address.trim()}`);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Account not found on the Stellar network.");
     throw new Error(`Horizon error ${res.status}`);
@@ -120,26 +127,26 @@ export async function fetchAccount(address: string): Promise<HorizonAccount> {
   return res.json();
 }
 
-export async function fetchAccountTransactions(address: string, limit = 10): Promise<HorizonTransaction[]> {
+export async function fetchAccountTransactions(address: string, limit = 10, network: NetworkType = "testnet"): Promise<HorizonTransaction[]> {
   const res = await fetch(
-    `${HORIZON}/accounts/${address.trim()}/transactions?limit=${limit}&order=desc`
+    `${getHorizonUrl(network)}/accounts/${address.trim()}/transactions?limit=${limit}&order=desc`
   );
   if (!res.ok) return [];
   const data = await res.json();
   return data._embedded?.records ?? [];
 }
 
-export async function fetchAccountOperations(address: string, limit = 10): Promise<HorizonOperation[]> {
+export async function fetchAccountOperations(address: string, limit = 10, network: NetworkType = "testnet"): Promise<HorizonOperation[]> {
   const res = await fetch(
-    `${HORIZON}/accounts/${address.trim()}/operations?limit=${limit}&order=desc`
+    `${getHorizonUrl(network)}/accounts/${address.trim()}/operations?limit=${limit}&order=desc`
   );
   if (!res.ok) return [];
   const data = await res.json();
   return data._embedded?.records ?? [];
 }
 
-export async function fetchAsset(code: string, issuer?: string): Promise<HorizonAsset | null> {
-  let url = `${HORIZON}/assets?asset_code=${code}&limit=1`;
+export async function fetchAsset(code: string, issuer?: string, network: NetworkType = "testnet"): Promise<HorizonAsset | null> {
+  let url = `${getHorizonUrl(network)}/assets?asset_code=${code}&limit=1`;
   if (issuer) url += `&asset_issuer=${issuer}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Horizon error ${res.status}`);
@@ -149,9 +156,9 @@ export async function fetchAsset(code: string, issuer?: string): Promise<Horizon
   return records[0];
 }
 
-export async function fetchLatestLedger(): Promise<LedgerStats | null> {
+export async function fetchLatestLedger(network: NetworkType = "testnet"): Promise<LedgerStats | null> {
   try {
-    const res = await fetch(`${HORIZON}/ledgers?order=desc&limit=1`);
+    const res = await fetch(`${getHorizonUrl(network)}/ledgers?order=desc&limit=1`);
     if (!res.ok) return null;
     const data = await res.json();
     return data._embedded?.records?.[0] ?? null;
@@ -167,16 +174,17 @@ export function detectInputType(input: string): SearchMode {
 }
 
 export async function searchStellar(
-  input: string
+  input: string,
+  network: NetworkType = "testnet"
 ): Promise<{ mode: SearchMode; account?: HorizonAccount; asset?: HorizonAsset }> {
   const mode = detectInputType(input);
   if (mode === "account") {
-    const account = await fetchAccount(input);
+    const account = await fetchAccount(input, network);
     return { mode, account };
   } else {
     const parsed = parseAssetInput(input);
     if (!parsed) throw new Error("Could not parse input. Use a Stellar address (GXXX...) or asset code (e.g. USDC or USDC:GXXX...)");
-    const asset = await fetchAsset(parsed.code, parsed.issuer);
+    const asset = await fetchAsset(parsed.code, parsed.issuer, network);
     if (!asset) throw new Error("Asset not found.");
     return { mode, asset };
   }

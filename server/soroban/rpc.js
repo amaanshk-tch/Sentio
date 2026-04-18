@@ -1,12 +1,13 @@
 
-import { SOROBAN_RPC_URL as RPC_URL } from "../config.js";
+import { SOROBAN_RPC_URL as DEFAULT_RPC_URL } from "../config.js";
 
 let _reqId = 0;
 function nextId() { return ++_reqId; }
 
-export async function rpcCall(method, params = {}, { signal } = {}) {
+export async function rpcCall(method, params = {}, { signal, rpcUrl } = {}) {
+  const url = rpcUrl || DEFAULT_RPC_URL;
   const body = JSON.stringify({ jsonrpc: "2.0", id: nextId(), method, params });
-  const res  = await fetch(RPC_URL, {
+  const res = await fetch(url, {
     method:  "POST",
     signal,
     headers: { "Content-Type": "application/json", accept: "application/json" },
@@ -26,21 +27,20 @@ export async function rpcCall(method, params = {}, { signal } = {}) {
   return json.result;
 }
 
-export async function getLatestLedger({ signal } = {}) {
-  return rpcCall("getLatestLedger", {}, { signal });
+export async function getLatestLedger({ signal, rpcUrl } = {}) {
+  return rpcCall("getLatestLedger", {}, { signal, rpcUrl });
 }
 
-
-export async function getTransactions(startLedger, { signal, limit = 200 } = {}) {
+export async function getTransactions(startLedger, { signal, limit = 200, rpcUrl } = {}) {
   const result = await rpcCall(
     "getTransactions",
     { startLedger, pagination: { limit } },
-    { signal }
+    { signal, rpcUrl }
   );
   return result?.transactions ?? [];
 }
 
-export async function getEvents(startLedger, contractId, { signal, limit = 100 } = {}) {
+export async function getEvents(startLedger, contractId, { signal, limit = 100, rpcUrl } = {}) {
   const result = await rpcCall(
     "getEvents",
     {
@@ -48,8 +48,7 @@ export async function getEvents(startLedger, contractId, { signal, limit = 100 }
       filters: [{ contractIds: [contractId] }],
       pagination: { limit },
     },
-    { signal }
+    { signal, rpcUrl }
   );
   return result?.events ?? [];
 }
-

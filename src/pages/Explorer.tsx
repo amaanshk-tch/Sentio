@@ -140,7 +140,7 @@ function useLiveStream(
       try {
         const msg = JSON.parse(ev.data as string);
         if (msg.type === "update") {
-          const { type: _t, newTx, ...scanPatch } = msg;
+          const { newTx, ...scanPatch } = msg;
           if (newTx?.id) setLastTxId(newTx.id as string);
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
         } else if (msg.type === "stream_stopped") {
@@ -1447,6 +1447,7 @@ export default function Explorer() {
   useEffect(() => {
     const q = searchParams.get("q");
     if (q) handleSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = () => {
@@ -1521,6 +1522,7 @@ export default function Explorer() {
               className="w-full rounded-2xl border border-foreground/10 bg-sentio-surface/80 py-4 pl-12 pr-4 font-mono text-sm sm:text-base text-foreground placeholder-sentio-text-muted backdrop-blur-md outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/20 shadow-inner"
             />
           </div>
+
           <button
             id="explorer-scan-btn"
             type="submit"
@@ -1538,9 +1540,9 @@ export default function Explorer() {
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             {[
               { label: "Example account",  value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
-              { label: "USDC asset",       value: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "AQUA asset",       value: "AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
-              { label: "Contract scan",   value: "CA5O6JA2JY7DPDFQ4L3T6OZXO7WBPW5JLP3EMD764MHJFAZXZCCJ7TYD" },
+              { label: "USDC asset",       value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+              { label: "AQUA asset",       value: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
+              { label: "Contract scan",   value: "CBLVG2GABTSV33NNJZYV62OLH4VEDNQNTEMC7ONS3IGFMS2T5BRZPQ33" },
             ].map(({ label, value }) => (
               <button
                 key={value}
