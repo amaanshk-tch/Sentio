@@ -1,5 +1,4 @@
-import { HORIZON_URL } from "../config.js";
-export { HORIZON_URL };
+export { getHorizonUrl } from "../config.js";
 
 export async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });

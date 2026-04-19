@@ -1,4 +1,4 @@
-import { HORIZON_URL, isAccount } from "../utils/stellarContext.js";
+import { getHorizonUrl, isAccount } from "../utils/stellarContext.js";
 import { runScan } from "../api/scan.js";
 
 const STREAM_TTL_MS    = 5 * 60 * 1000;
@@ -33,6 +33,7 @@ export function setupWebSocket(wss) {
     let streamController = null;
     let killTimer        = null;
     let lastScore        = null;
+    let activeNetwork    = "testnet"; // tracks network for this connection
 
     function cleanup() {
       if (killTimer)        { clearTimeout(killTimer); killTimer = null; }
@@ -53,7 +54,8 @@ export function setupWebSocket(wss) {
       streamController = new AbortController();
       resetKillTimer();
 
-      const url = `${HORIZON_URL}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&cursor=now`;
+      const horizonUrl = getHorizonUrl(activeNetwork);
+      const url = `${horizonUrl}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&cursor=now`;
       try {
         const res = await fetch(url, {
           signal: streamController.signal,
@@ -87,7 +89,7 @@ export function setupWebSocket(wss) {
             try {
               const controller = new AbortController();
               const t = setTimeout(() => controller.abort(), 12_000);
-              const updated = await runScan(accountId, { signal: controller.signal, prevScore: lastScore });
+              const updated = await runScan(accountId, { signal: controller.signal, prevScore: lastScore, network: activeNetwork });
               clearTimeout(t);
               
               lastScore = updated.score;
@@ -104,12 +106,31 @@ export function setupWebSocket(wss) {
       }
     }
 
+    let messageCount = 0;
+    let windowStart = Date.now();
+
     ws.on("message", (raw) => {
+      const now = Date.now();
+      if (now - windowStart > 1000) {
+        windowStart = now;
+        messageCount = 0;
+      }
+      messageCount++;
+      if (messageCount > 4) {
+        ws.close(1008, "Message rate limit exceeded");
+        return;
+      }
+
       try {
         const msg = JSON.parse(String(raw));
         if (msg.type === "subscribe" && msg.accountId) {
           const id = String(msg.accountId).trim().toUpperCase();
+          const net = msg.network === "mainnet" ? "mainnet" : "testnet";
           if (isAccount(id)) {
+            if (net !== activeNetwork) {
+              activeNetwork = net;
+              lastScore = null; // reset score baseline when network changes
+            }
             startStream(id);
           }
         } else if (msg.type === "unsubscribe") {

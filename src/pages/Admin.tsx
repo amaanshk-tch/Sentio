@@ -5,8 +5,11 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, Copy } from "lucide-react";
 import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { NetworkToggle } from "@/components/ui/NetworkToggle";
 
 export default function Admin() {
+  const { passphrase: networkPassphrase } = useNetwork();
   const [token, setToken]       = useState("");
   const tokenRef                = useRef("");
   const [unlocked, setUnlocked] = useState(false);
@@ -109,8 +112,7 @@ export default function Admin() {
 
   const signAndSubmit = async (unsignedXdr: string): Promise<{ hash: string } | null> => {
     try {
-      const NETWORK_PASSPHRASE = import.meta.env.VITE_STELLAR_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015";
-      const result = await signTransaction(unsignedXdr, { networkPassphrase: NETWORK_PASSPHRASE });
+      const result = await signTransaction(unsignedXdr, { networkPassphrase });
       if (!result?.signedTxXdr) throw new Error("Freighter did not return a signed transaction.");
 
       const submitRes = await fetch("/api/registry/submit", {
@@ -209,6 +211,7 @@ export default function Admin() {
       <header className="flex items-center justify-between gap-4 py-5">
         <BrandMark to="/" size="lg" />
         <div className="flex items-center gap-3">
+          <NetworkToggle />
           {unlocked && (
             <button
               onClick={walletAddress ? handleDisconnect : handleConnect}

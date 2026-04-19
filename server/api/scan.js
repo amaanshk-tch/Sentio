@@ -1,5 +1,5 @@
 import {
-  HORIZON_URL as activeHorizon,
+  getHorizonUrl,
   fetchJson,
   parseAsset,
   isAccount,
@@ -28,7 +28,8 @@ function shouldWriteOnchain(address) {
   return true;
 }
 
-export async function runScan(query, { signal, prevScore = null } = {}) {
+export async function runScan(query, { signal, prevScore = null, network = "testnet" } = {}) {
+  const horizonUrl = getHorizonUrl(network);
   const asset   = parseAsset(query);
   const isAsset = Boolean(asset);
   const accountId = isAsset ? asset.issuer : query;
@@ -39,41 +40,41 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
   let assetPromise = Promise.resolve(null);
   if (isAsset) {
     assetPromise = fetchJson(
-      `${activeHorizon}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
+      `${horizonUrl}/assets?asset_code=${encodeURIComponent(asset.code)}&asset_issuer=${encodeURIComponent(asset.issuer)}&limit=1`,
       { signal }
     ).catch(() => null);
   }
 
-  const accountPromise = fetchJson(`${activeHorizon}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
+  const accountPromise = fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(accountId)}`, { signal }).catch(() => null);
 
   const domainPromise = accountPromise.then((acc) => 
     verifyHomeDomain(acc?.home_domain || null, accountId)
   ).catch(() => ({ verified: false, homeDomain: null, accountListed: false }));
 
+  const onchainRiskPromise   = getOnchainRisk(accountId);
   const onchainHistoryPromise = getOnchainHistory(accountId);
   const onchainFlagsPromise   = getOnchainFlags(accountId);
-  const onchainRiskPromise    = getOnchainRisk(accountId);
 
   const txRecentPromise = fetchJson(
-    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
+    `${horizonUrl}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,
     { signal }
   ).catch(() => null);
   const txOldestPromise = fetchJson(
-    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
+    `${horizonUrl}/accounts/${encodeURIComponent(accountId)}/transactions?order=asc&limit=1`,
     { signal }
   ).catch(() => null);
 
   const opsPromise = fetchJson(
-    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
+    `${horizonUrl}/accounts/${encodeURIComponent(accountId)}/operations?order=desc&limit=50`,
     { signal }
   ).catch(() => null);
   const offersPromise = fetchJson(
-    `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
+    `${horizonUrl}/accounts/${encodeURIComponent(accountId)}/offers?limit=20`,
     { signal }
   ).catch(() => null);
 
   const claimablePromise = fetchJson(
-    `${activeHorizon}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
+    `${horizonUrl}/claimable_balances?claimant=${encodeURIComponent(accountId)}&limit=10`,
     { signal }
   ).catch(() => null);
 
@@ -158,7 +159,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     const cpIds = [...counterIds].slice(0, 5);
     await Promise.all(cpIds.map(async (id) => {
       try {
-        const acc = await fetchJson(`${activeHorizon}/accounts/${encodeURIComponent(id)}`, { signal });
+        const acc = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(id)}`, { signal });
         if (acc?.home_domain) knownVerified++;
       } catch {}
     }));
@@ -276,7 +277,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
     onchainRiskData: onchainData,
     onchainHistory: onchainHistory,
     onchainFlags: onchainFlags,
-    raw: { horizon: activeHorizon, accountId },
+    raw: { horizon: horizonUrl, accountId },
   };
 }
 
@@ -285,20 +286,23 @@ export async function scanHandler(req, res) {
     const query = normalizeQuery(req.body?.query ?? "");
     if (!query) return res.status(400).json({ error: "Missing query" });
 
+    const rawNetwork = req.body?.network;
+    const network = rawNetwork === "mainnet" ? "mainnet" : "testnet";
+
     const asset   = parseAsset(query);
     const isAsset = Boolean(asset);
     if (!isAsset && !isAccount(query)) {
       return res.status(400).json({ error: "Invalid input. Use a Stellar account (G...) or CODE:ISSUER." });
     }
 
-    const cacheKey = isAsset ? `asset:${asset.code}:${asset.issuer}` : `account:${query}`;
+    const cacheKey = isAsset ? `${network}:asset:${asset.code}:${asset.issuer}` : `${network}:account:${query}`;
     const cached   = cacheGet(cacheKey);
     if (cached) return res.json({ ...cached, cached: true });
 
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
-      const result = await runScan(query, { signal: controller.signal });
+      const result = await runScan(query, { signal: controller.signal, network });
       cacheSet(cacheKey, result);
       return res.json(result);
     } finally {

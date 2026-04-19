@@ -9,20 +9,20 @@ import {
   Account
 } from "@stellar/stellar-sdk";
 
-import { SOROBAN_RPC_URL, SOROBAN_NETWORK_PASSPHRASE, HORIZON_URL } from "../config.js";
+import { SOROBAN_RPC_URL, SOROBAN_NETWORK_PASSPHRASE, getHorizonUrl, getSorobanRpcUrl, getNetworkPassphrase, getContractId } from "../config.js";
 
 const RPC_URL = SOROBAN_RPC_URL;
 const NETWORK_PASSPHRASE = SOROBAN_NETWORK_PASSPHRASE;
+// NOTE: Contracts are deployed on testnet. Registry functions always target testnet.
 const CONTRACT_ID = process.env.RISK_REGISTRY_CONTRACT_ID;
 const ADMIN_SECRET = process.env.SENTIO_ADMIN_SECRET;
 
-const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
-
 const rpcServer = new rpc.Server(RPC_URL);
 
-async function loadAccount(accountId) {
-  const res = await fetch(`${TESTNET_HORIZON}/accounts/${encodeURIComponent(accountId)}`);
-  if (!res.ok) throw new Error(`Could not load account ${accountId} from testnet Horizon (HTTP ${res.status})`);
+async function loadAccount(accountId, network = "testnet") {
+  const horizonUrl = getHorizonUrl(network);
+  const res = await fetch(`${horizonUrl}/accounts/${encodeURIComponent(accountId)}`);
+  if (!res.ok) throw new Error(`Could not load account ${accountId} from ${network} Horizon (HTTP ${res.status})`);
   const data = await res.json();
   return new Account(accountId, data.sequence);
 }
@@ -74,7 +74,7 @@ export async function setOnchainRisk(address, payload) {
     const adminKp = Keypair.fromSecret(ADMIN_SECRET);
     const contract = new Contract(CONTRACT_ID);
     
-    const sourceAccount = await loadAccount(adminKp.publicKey());
+    const sourceAccount = await loadAccount(adminKp.publicKey(), "testnet");
     
     const tx = new TransactionBuilder(sourceAccount, {
       fee: "1000",
@@ -186,7 +186,7 @@ export async function buildFlagTransaction(signerAddress, address, reason, sever
   const contract = new Contract(CONTRACT_ID);
   
   console.log("[buildFlag] Loading account:", signerAddress);
-  const sourceAccount = await loadAccount(signerAddress);
+  const sourceAccount = await loadAccount(signerAddress, "testnet");
   console.log("[buildFlag] Account loaded, sequence:", sourceAccount.sequence);
 
   const tx = new TransactionBuilder(sourceAccount, {
@@ -230,7 +230,7 @@ export async function buildFlagTransaction(signerAddress, address, reason, sever
 export async function buildSetRiskTransaction(signerAddress, address, score, confidence, category) {
   if (!CONTRACT_ID) throw new Error("No contract configured.");
   const contract = new Contract(CONTRACT_ID);
-  const sourceAccount = await loadAccount(signerAddress);
+  const sourceAccount = await loadAccount(signerAddress, "testnet");
 
   const tx = new TransactionBuilder(sourceAccount, {
     fee: "1000",
@@ -255,33 +255,48 @@ export async function buildSetRiskTransaction(signerAddress, address, score, con
   return assembled.toXDR();
 }
 
-  export async function submitSignedTransaction(signedXdr) {
+export async function submitSignedTransaction(signedXdr) {
+  try {
+    const { TransactionBuilder: TB, StrKey, xdr: StellarXdr } = await import("@stellar/stellar-sdk");
+    const tx = TB.fromXDR(signedXdr, NETWORK_PASSPHRASE);
+
+    if (!CONTRACT_ID) {
+      return { success: false, reason: "No contract configured on server." };
+    }
+
+    // Decode expected contract ID to raw bytes for comparison
+    let expectedBytes;
     try {
-      const { TransactionBuilder: TB, StrKey } = await import("@stellar/stellar-sdk");
-      const tx = TB.fromXDR(signedXdr, NETWORK_PASSPHRASE);
-      
-      const ops = tx.operations;
-      const isValid = ops.every(op => {
-        if (op.type !== "invokeHostFunction") return false;
-        
-        try {
-          if (!op.func || !op.func.invokeContract) return false;
-          const ic = op.func.invokeContract();
-          const addr = ic.contractAddress();
-          if (!addr || !addr.contractId) return false;
-          
-          const extractedId = StrKey.encodeContract(addr.contractId());
-          if (extractedId !== CONTRACT_ID) return false;
-        } catch (e) {
-          return false;
-        }
-        
-        return true;
-      });
-  
-      if (!isValid) {
-        return { success: false, reason: "Forbidden: Transaction contains operations not targeting the risk registry contract." };
+      expectedBytes = StrKey.decodeContract(CONTRACT_ID);
+    } catch {
+      return { success: false, reason: "Server contract ID is misconfigured." };
+    }
+
+    // Validate every operation targets only the risk registry contract.
+    // stellar-sdk parsed ops don't expose contractId directly — inspect the raw XDR.
+    const ops = tx.operations;
+    const isValid = ops.every(op => {
+      if (op.type !== "invokeHostFunction") return false;
+      try {
+        const hostFn = op.func;
+        // Must be invokeContract type
+        if (hostFn.switch().name !== "hostFunctionTypeInvokeContract") return false;
+        const invokeArgs = hostFn.invokeContract();
+        // contractAddress() returns an ScAddress xdr object
+        const scAddr = invokeArgs.contractAddress();
+        // switch name is "scAddressTypeContract" for contracts
+        if (scAddr.switch().name !== "scAddressTypeContract") return false;
+        const contractIdBytes = scAddr.contractId();
+        // Compare byte-by-byte with expected
+        return Buffer.from(contractIdBytes).equals(Buffer.from(expectedBytes));
+      } catch {
+        return false;
       }
+    });
+
+    if (!isValid) {
+      return { success: false, reason: "Forbidden: Transaction contains operations not targeting the risk registry contract." };
+    }
 
     const response = await rpcServer.sendTransaction(tx);
     if (response.status === "PENDING" || response.status === "SUCCESS") {

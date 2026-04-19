@@ -6,6 +6,7 @@ import Index from "./pages/Index";
 import Explorer from "./pages/Explorer";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import { NetworkProvider } from "@/contexts/NetworkContext";
 
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
@@ -15,15 +16,17 @@ const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/explorer" element={<Explorer />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <NetworkProvider>
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/explorer" element={<Explorer />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </NetworkProvider>
       </TooltipProvider>
     </QueryClientProvider>
   </ErrorBoundary>

@@ -13,8 +13,10 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger,
-  type HorizonAccount, type HorizonAsset, type HorizonTransaction, type HorizonOperation, type LedgerStats, type NetworkType
+  type HorizonAccount, type HorizonAsset, type HorizonTransaction, type HorizonOperation, type LedgerStats,
 } from "@/lib/stellar";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { NetworkToggle } from "@/components/ui/NetworkToggle";
 
 export interface OnchainRisk {
   score: number;
@@ -103,6 +105,7 @@ type StreamStatus = "idle" | "live" | "stopped";
 
 function useLiveStream(
   accountId: string | null,
+  network: "mainnet" | "testnet",
   onUpdate: (patch: Partial<ScanResult>) => void,
 ): { status: StreamStatus; lastTxId: string | null } {
   const wsRef   = useRef<WebSocket | null>(null);
@@ -132,7 +135,7 @@ function useLiveStream(
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "subscribe", accountId }));
+      ws.send(JSON.stringify({ type: "subscribe", accountId, network }));
       setStatus("live");
     };
 
@@ -162,7 +165,7 @@ function useLiveStream(
       ws.close();
       wsRef.current = null;
     };
-  }, [accountId]);
+  }, [accountId, network]);
 
   return { status, lastTxId };
 }
@@ -1337,16 +1340,18 @@ type SearchState =
 export default function Explorer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [network, setNetwork] = useState<NetworkType>((searchParams.get("network") as NetworkType) || "testnet");
   const [state, setState] = useState<SearchState>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
+  const { network } = useNetwork();
+  // Re-run the search when network changes and a result is already shown
+  const lastQueryRef = useRef<string | null>(null);
 
-  const handleSearch = useCallback(async (q: string, overrideNetwork?: NetworkType) => {
-    const activeNetwork = overrideNetwork ?? network;
+  const handleSearch = useCallback(async (q: string, opts?: { network?: string }) => {
     const trimmed = q.trim();
     if (!trimmed) return;
+    lastQueryRef.current = trimmed;
 
-    setSearchParams({ q: trimmed, network: activeNetwork }, { replace: true });
+    setSearchParams({ q: trimmed }, { replace: true });
     setState({ status: "loading" });
 
     if (trimmed.toUpperCase() === "XLM") {
@@ -1357,6 +1362,7 @@ export default function Explorer() {
       return;
     }
 
+    const activeNetwork = (opts?.network ?? network) as "mainnet" | "testnet";
     const isContract = /^C[A-Z2-7]{55}$/.test(trimmed);
 
     try {
@@ -1364,7 +1370,7 @@ export default function Explorer() {
         const res = await fetch("/api/scan/contract", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contractId: trimmed }),
+          body: JSON.stringify({ contractId: trimmed, network: activeNetwork }),
         });
         if (res.status === 429) {
           const ra = parseInt(res.headers.get("Retry-After") || "60", 10);
@@ -1411,7 +1417,7 @@ export default function Explorer() {
           const scanReq = await fetch("/api/scan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: trimmed }),
+            body: JSON.stringify({ query: trimmed, network: activeNetwork }),
           });
 
           if (scanReq.status === 429) {
@@ -1448,14 +1454,23 @@ export default function Explorer() {
 
   useEffect(() => {
     const q = searchParams.get("q");
-    if (q) handleSearch(q, network);
+    if (q) handleSearch(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-run search when user switches networks (if a search is active)
+  useEffect(() => {
+    const q = lastQueryRef.current;
+    if (q && state.status === "done") {
+      handleSearch(q, { network });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network]);
 
   const reset = () => {
     setState({ status: "idle" });
     setQuery("");
-    setSearchParams({ network }, { replace: true });
+    setSearchParams({}, { replace: true });
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -1465,6 +1480,7 @@ export default function Explorer() {
 
   const { status: streamStatus, lastTxId } = useLiveStream(
     liveAccountId,
+    network,
     useCallback((patch: Partial<ScanResult>) => {
       setState((prev) => {
         if (prev.status !== "done") return prev;
@@ -1480,19 +1496,33 @@ export default function Explorer() {
     <PageLayout>
       <header className="flex items-center justify-between gap-4 py-5 mb-4">
         <BrandMark to="/" size="lg" />
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
+        <div className="flex items-center gap-3">
+          <NetworkToggle />
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Link>
+        </div>
       </header>
 
       <div className="mb-8 animate-fade-in-up md:text-center md:flex md:flex-col md:items-center">
-        <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
-          Stellar Explorer
-        </span>
+        <div className="inline-flex items-center gap-2">
+          <span className="inline-flex rounded-full border border-foreground/8 bg-sentio-surface/50 px-3 py-1.5 text-caption-upper">
+            Stellar Explorer
+          </span>
+          <span className={[
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-caption-upper font-bold",
+            network === "mainnet"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-400",
+          ].join(" ")}>
+            <span className={`h-1.5 w-1.5 rounded-full ${network === "mainnet" ? "bg-emerald-400" : "bg-amber-400"}`} />
+            {network === "mainnet" ? "Mainnet" : "Testnet"}
+          </span>
+        </div>
         <h1 className="text-display mt-4 max-w-[24ch]">
           Scan any <strong>account</strong>,{" "}
           <span className="bg-linear-to-r from-accent to-primary bg-clip-text font-bold text-transparent">
@@ -1506,22 +1536,6 @@ export default function Explorer() {
       </div>
 
       <div className="mb-10 max-w-2xl mx-auto">
-        <div className="flex bg-sentio-surface/40 p-1 rounded-xl w-fit mx-auto mb-4 border border-foreground/5 items-center">
-          <button 
-            type="button"
-            onClick={() => { setNetwork("mainnet"); reset(); setSearchParams({ network: "mainnet" }, { replace: true }); }}
-            className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${network === "mainnet" ? "bg-primary text-primary-foreground shadow-sentio-sm" : "text-sentio-text-muted hover:text-white"}`}
-          >
-            Mainnet
-          </button>
-          <button 
-            type="button"
-            onClick={() => { setNetwork("testnet"); reset(); setSearchParams({ network: "testnet" }, { replace: true }); }}
-            className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${network === "testnet" ? "bg-primary text-primary-foreground shadow-sentio-sm" : "text-sentio-text-muted hover:text-white"}`}
-          >
-            Testnet
-          </button>
-        </div>
         <form
           onSubmit={(e) => { e.preventDefault(); handleSearch(query); }}
           className="flex flex-col sm:flex-row gap-2 shadow-sentio-lg rounded-2xl"
