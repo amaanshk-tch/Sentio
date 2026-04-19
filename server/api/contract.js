@@ -68,11 +68,14 @@ export async function contractScanHandler(req, res) {
     }
   } catch (err) {
     console.error("[contract scan error]", err?.message);
-    const status = err?.status === 404 ? 404 : 500;
-    const fallbackMessage = err?.name === "AbortError"
-      ? "Request timed out. Please try again."
-      : "Contract scan failed. Please try again.";
-    const message = err?.status === 404 ? err.message : fallbackMessage;
+
+    let status = 500;
+    if (err?.status === 404) status = 404;
+
+    let message = "Contract scan failed. Please try again.";
+    if (err?.name === "AbortError") message = "Request timed out. Please try again.";
+    if (err?.status === 404) message = err.message;
+
     return res.status(status).json({ error: message });
   }
 }
