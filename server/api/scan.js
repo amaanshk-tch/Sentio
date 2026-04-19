@@ -318,12 +318,14 @@ export async function scanHandler(req, res) {
     }
   } catch (err) {
     console.error("[scan error]", err?.message);
-    const status = err?.status === 404 ? 404 : 500;
-    const message = err?.status === 404
-      ? err.message
-      : err?.name === "AbortError"
-        ? "Request timed out. Please try again."
-        : "Scan failed. Please try again.";
+
+    let status = 500;
+    if (err?.status === 404) status = 404;
+
+    let message = "Scan failed. Please try again.";
+    if (err?.name === "AbortError") message = "Request timed out. Please try again.";
+    if (err?.status === 404) message = err.message;
+
     return res.status(status).json({ error: message });
   }
 }
