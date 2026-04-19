@@ -1601,7 +1601,6 @@ export default function Explorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-run search when user switches networks (if a search is active)
   useEffect(() => {
     const q = lastQueryRef.current;
     if (q && state.status === "done") {
