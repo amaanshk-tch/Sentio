@@ -6,7 +6,7 @@ import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, C
 import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
 import { useNetwork } from "@/contexts/NetworkContext";
-import { NetworkToggle } from "@/components/ui/NetworkToggle";
+
 
 export default function Admin() {
   const { passphrase: networkPassphrase } = useNetwork();
@@ -211,7 +211,7 @@ export default function Admin() {
       <header className="flex items-center justify-between gap-4 py-5">
         <BrandMark to="/" size="lg" />
         <div className="flex items-center gap-3">
-          <NetworkToggle />
+
           {unlocked && (
             <button
               onClick={walletAddress ? handleDisconnect : handleConnect}

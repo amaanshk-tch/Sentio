@@ -104,6 +104,14 @@ export async function runScan(query, { signal, prevScore = null, network = "test
     onchainFlagsPromise
   ]);
 
+  // Hard network segregation: account must exist on the selected network.
+  if (!account) {
+    const label = network === "mainnet" ? "Mainnet" : "Testnet";
+    const err = new Error(`Account not found on ${label}. Make sure you are on the correct network.`);
+    err.status = 404;
+    throw err;
+  }
+
   if (assetsResponse) {
     const record = assetsResponse?._embedded?.records?.[0];
     if (record?.amount != null) { 
@@ -312,7 +320,7 @@ export async function scanHandler(req, res) {
     console.error("[scan error]", err?.message);
     const status = err?.status === 404 ? 404 : 500;
     const message = err?.status === 404
-      ? "Not found on Stellar network."
+      ? err.message
       : err?.name === "AbortError"
         ? "Request timed out. Please try again."
         : "Scan failed. Please try again.";

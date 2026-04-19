@@ -119,9 +119,10 @@ function parseAssetInput(input: string): { code: string; issuer?: string } | nul
 }
 
 export async function fetchAccount(address: string, network: NetworkType = "testnet"): Promise<HorizonAccount> {
+  const label = network === "mainnet" ? "Mainnet" : "Testnet";
   const res = await fetch(`${getHorizonUrl(network)}/accounts/${address.trim()}`);
   if (!res.ok) {
-    if (res.status === 404) throw new Error("Account not found on the Stellar network.");
+    if (res.status === 404) throw new Error(`Account not found on ${label}. Make sure you are on the correct network.`);
     throw new Error(`Horizon error ${res.status}`);
   }
   return res.json();
@@ -146,13 +147,14 @@ export async function fetchAccountOperations(address: string, limit = 10, networ
 }
 
 export async function fetchAsset(code: string, issuer?: string, network: NetworkType = "testnet"): Promise<HorizonAsset | null> {
+  const label = network === "mainnet" ? "Mainnet" : "Testnet";
   let url = `${getHorizonUrl(network)}/assets?asset_code=${code}&limit=1`;
   if (issuer) url += `&asset_issuer=${issuer}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Horizon error ${res.status}`);
   const data = await res.json();
   const records: HorizonAsset[] = data._embedded?.records ?? [];
-  if (records.length === 0) throw new Error(`Asset ${code} not found on the Stellar network.`);
+  if (records.length === 0) throw new Error(`Asset ${code} not found on ${label}. Make sure you are on the correct network.`);
   return records[0];
 }
 

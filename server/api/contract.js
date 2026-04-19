@@ -11,14 +11,17 @@ export async function contractScanHandler(req, res) {
       return res.status(400).json({ error: "Invalid contract ID. Must start with 'C' and be 56 characters." });
     }
 
-    const cacheKey = `contract:${query}`;
+    const rawNetwork = req.body?.network;
+    const network    = rawNetwork === "mainnet" ? "mainnet" : "testnet";
+
+    const cacheKey = `${network}:contract:${query}`;
     const cached   = cacheGet(cacheKey);
     if (cached) return res.json({ ...cached, cached: true });
 
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
-      const data     = await analyzeContract(query, { signal: controller.signal });
+      const data     = await analyzeContract(query, { signal: controller.signal, network });
       const risk     = computeContractRisk(data);
       const insights = buildInsights(risk.flags);
       const summary  = buildSummary(data, risk);
@@ -27,6 +30,7 @@ export async function contractScanHandler(req, res) {
       const result = {
         type: "contract",
         contractId: query,
+        network,
         score: risk.score,
         risk: risk.risk,
         color: risk.color,
@@ -66,7 +70,7 @@ export async function contractScanHandler(req, res) {
     console.error("[contract scan error]", err?.message);
     const status = err?.status === 404 ? 404 : 500;
     const message = err?.status === 404
-      ? "Contract not found or has no activity."
+      ? err.message
       : err?.name === "AbortError"
         ? "Request timed out. Please try again."
         : "Contract scan failed. Please try again.";

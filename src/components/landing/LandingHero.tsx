@@ -14,7 +14,7 @@ const fade: Variants = {
   }),
 };
 
-export function LandingHero() {
+export function LandingHero({ onReveal }: { onReveal?: () => void }) {
   return (
     <>
       <motion.header
@@ -83,12 +83,19 @@ export function LandingHero() {
               Open explorer
               <ArrowRight className="h-4 w-4" aria-hidden />
             </GlowButton>
-            <a
-              href="#what"
-              className="inline-flex items-center rounded-xl px-4 py-3 text-sm font-medium text-sentio-text-muted transition hover:text-foreground"
+            <button
+              onClick={onReveal}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-sentio-text-muted transition hover:text-foreground"
             >
               How it works
-            </a>
+              <svg
+                className="h-4 w-4 animate-bounce"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </motion.div>
 
           <motion.ul

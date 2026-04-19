@@ -83,6 +83,7 @@ interface ScanResult {
 interface ContractScanResult {
   type: "contract";
   contractId: string;
+  network: "mainnet" | "testnet";
   score: number;
   risk: string;
   color: string;
@@ -211,6 +212,72 @@ function deriveRiskLabel(score: number): { label: string; color: string; bg: str
   return               { label: "Critical",   color: "text-sentio-danger",   bg: "bg-sentio-danger/10",   border: "border-sentio-danger/30" };
 }
 
+function getTrustBadge(score: number) {
+  if (score <= 20) {
+    return {
+      label: "Verified Safe",
+      description: "Minimal on-chain risk recorded.",
+      style: "border-sentio-success/30 bg-sentio-success/10 text-sentio-success",
+      type: "safe"
+    };
+  }
+  if (score <= 45) {
+    return {
+      label: "Low Risk",
+      description: "Safe in most scenarios but monitor changes.",
+      style: "border-emerald-400/30 bg-emerald-400/10 text-emerald-400",
+      type: "shield"
+    };
+  }
+  if (score <= 65) {
+    return {
+      label: "Moderate",
+      description: "Mixed signals detected; review risk factors.",
+      style: "border-sentio-warning/30 bg-sentio-warning/10 text-sentio-warning",
+      type: "info"
+    };
+  }
+  if (score <= 80) {
+    return {
+      label: "High Risk",
+      description: "Elevated risk found. Use extreme caution.",
+      style: "border-orange-400/30 bg-orange-400/10 text-orange-400",
+      type: "alert"
+    };
+  }
+  return {
+    label: "Critical Risk",
+    description: "Strong risk indicators present. Do not interact.",
+    style: "border-sentio-danger/30 bg-sentio-danger/10 text-sentio-danger",
+    type: "alert"
+  };
+}
+
+function getHistoryComparison(history: OnchainRisk[]) {
+  if (history.length < 2) return null;
+
+  const current = history[0];
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const previous = history.find((entry, index) => index > 0 && entry.last_updated <= oneWeekAgo) ?? history[1];
+
+  const delta = current.score - previous.score;
+  const trend = delta === 0 ? "stable" : delta > 0 ? "riskier" : "safer";
+  const label = delta === 0
+    ? "No meaningful change since the last saved checkpoint."
+    : delta > 0
+      ? `This contract is ${delta} points riskier than the previous saved checkpoint.`
+      : `This contract is ${Math.abs(delta)} points safer than the previous saved checkpoint.`;
+
+  return {
+    current,
+    previous,
+    delta,
+    trend,
+    label,
+    previousAgo: timeAgo(new Date(previous.last_updated).toISOString()),
+  };
+}
+
 function levelBadge(level?: "LOW" | "MEDIUM" | "HIGH") {
   if (level === "LOW") return "border-sentio-success/30 bg-sentio-success/10 text-sentio-success";
   if (level === "MEDIUM") return "border-sentio-warning/30 bg-sentio-warning/10 text-sentio-warning";
@@ -242,29 +309,104 @@ function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`sentio-shimmer rounded-lg ${className}`} />;
 }
 
-function RiskScoreCard({ onchainHistory }: { onchainHistory: OnchainRisk[] }) {
+function RiskScoreCard({ onchainHistory, scanResult }: { onchainHistory: OnchainRisk[]; scanResult?: ScanResult | null }) {
   if (onchainHistory.length === 0) return null;
   const latest = onchainHistory[0];
   const { label, color, bg, border } = deriveRiskLabel(latest.score);
+  const badge = getTrustBadge(latest.score);
+  const historyComparison = getHistoryComparison(onchainHistory);
+
+  const reasons = scanResult?.reasons?.length
+    ? scanResult.reasons
+    : scanResult?.contributions?.length
+      ? scanResult.contributions.slice(0, 4).map((contribution) => `${contribution.label} (${contribution.impact.toFixed(1)})`)
+      : [
+        historyComparison
+          ? `Latest saved checkpoint was recorded ${historyComparison.previousAgo}.`
+          : "Score is based on real on-chain registry history, transaction patterns, and trust signals.",
+      ];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`mb-6 flex items-center justify-between gap-6 rounded-2xl border ${border} ${bg} p-5`}
+      className={`mb-6 rounded-2xl border ${border} ${bg} p-5`}
     >
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-sentio-text-muted mb-1">Risk Assessment</p>
-        <p className={`text-4xl font-bold tabular-nums ${color}`}>
-          {latest.score}<span className="text-lg text-sentio-text-muted font-medium">/100</span>
-        </p>
-        <p className={`mt-1 text-sm font-semibold ${color}`}>{label}</p>
+      <div className="grid gap-4 lg:grid-cols-[1.5fr_0.9fr]">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-sentio-text-muted mb-1">Risk Assessment</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className={`text-5xl font-bold tabular-nums ${color}`}>
+              {latest.score}
+              <span className="text-lg text-sentio-text-muted font-medium">/100</span>
+            </p>
+            <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wider ${badge.style}`}>
+              {badge.type === "alert" ? <AlertTriangle className="h-3.5 w-3.5" /> : <Shield className="h-3.5 w-3.5" />}
+              {badge.label}
+            </span>
+          </div>
+          <p className={`mt-2 text-sm font-semibold ${color}`}>{label}</p>
+          <p className="mt-1 text-sm text-sentio-text-muted">{badge.description}</p>
+          <p className="text-xs text-sentio-text-muted mt-3">Confidence: {latest.confidence}%</p>
+          <p className="text-xs text-sentio-text-muted mt-1">Updated {timeAgo(new Date(latest.last_updated).toISOString())}</p>
+        </div>
+
+        <div className="rounded-2xl border border-foreground/10 bg-sentio-surface/70 p-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted mb-3">Visual risk gauge</p>
+          <div className="relative h-3 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="absolute left-0 top-0 h-full rounded-full bg-linear-to-r from-sentio-success via-sentio-warning to-sentio-danger"
+              style={{ width: `${Math.min(100, Math.max(0, latest.score))}%` }}
+            />
+          </div>
+          <div className="mt-3 flex justify-between text-[0.65rem] uppercase tracking-wider text-sentio-text-muted">
+            <span>0 safe</span>
+            <span>100 risky</span>
+          </div>
+          {historyComparison ? (
+            <div className="mt-4 rounded-2xl border border-foreground/10 bg-background/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-sentio-text-muted mb-2">History snapshot</p>
+              <div className="flex items-center justify-between gap-3 text-sm text-foreground">
+                <div>
+                  <p className="font-semibold">{historyComparison.trend === "safer" ? "Safer than before" : historyComparison.trend === "riskier" ? "Riskier than before" : "Stable risk"}</p>
+                  <p className="text-xs text-sentio-text-muted">Compared to {historyComparison.previousAgo}</p>
+                </div>
+                <span className={`rounded-full px-2 py-1 text-[0.65rem] font-bold uppercase ${historyComparison.delta > 0 ? "border-sentio-danger/20 bg-sentio-danger/10 text-sentio-danger" : historyComparison.delta < 0 ? "border-sentio-success/20 bg-sentio-success/10 text-sentio-success" : "border-foreground/10 bg-foreground/5 text-sentio-text-muted"}`}>
+                  {historyComparison.delta > 0 ? "+" : ""}{historyComparison.delta}
+                </span>
+              </div>
+              <div className="mt-3 flex justify-between text-xs text-sentio-text-muted">
+                <span>{historyComparison.previous.score}/100</span>
+                <span>{latest.score}/100</span>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-sentio-text-muted">No prior saved checkpoint available. History trend loads once there are at least two registry entries.</p>
+          )}
+        </div>
       </div>
-      <div className="text-right shrink-0">
-        <p className="text-xs text-sentio-text-muted mb-1 uppercase tracking-wider font-bold">Category</p>
-        <p className="text-base font-semibold text-white capitalize">{latest.category || "Unknown"}</p>
-        <p className="text-xs text-sentio-text-muted mt-1">Confidence: {latest.confidence}%</p>
-        <p className="text-xs text-sentio-text-muted mt-0.5">{timeAgo(new Date(latest.last_updated).toISOString())}</p>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-foreground/10 bg-sentio-surface/70 p-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted mb-3">Why this score?</p>
+          <ul className="space-y-2 text-sm text-foreground">
+            {reasons.map((reason, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-2xl border border-foreground/10 bg-sentio-surface/70 p-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted mb-3">Risk logic</p>
+          <div className="space-y-2 text-sm text-foreground">
+            <p>Score is grounded in actual on-chain signals: account behavior, transaction patterns, trustline exposure, and registry history.</p>
+            <p>Historical risk data is preserved on-chain and compared against the latest saved entry to answer “Was this safer before?”.</p>
+            <p>Trust badges are derived from numeric thresholds, so you get consistent verdicts like Verified Safe and High Risk.</p>
+          </div>
+        </div>
       </div>
     </motion.div>
   );
@@ -646,7 +788,7 @@ function AccountPanel({ account, txns, ops, onchainHistory, onchainFlags, scanRe
     <div className="space-y-4">
       <EngineRiskCard scan={scanResult} isLive={isLive} />
       {scanResult?.breakdown && <ScanBreakdownCard breakdown={scanResult.breakdown} />}
-      <RiskScoreCard onchainHistory={onchainHistory} />
+      <RiskScoreCard onchainHistory={onchainHistory} scanResult={scanResult} />
       <FlagBanner flags={onchainFlags} />
 
       <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
@@ -1013,7 +1155,7 @@ function AssetPanel({ asset, onchainHistory, onchainFlags, scanResult }: AssetPa
     <div className="space-y-4">
       <EngineRiskCard scan={scanResult} />
       {scanResult?.breakdown && <ScanBreakdownCard breakdown={scanResult.breakdown} />}
-      <RiskScoreCard onchainHistory={onchainHistory} />
+      <RiskScoreCard onchainHistory={onchainHistory} scanResult={scanResult} />
       <FlagBanner flags={onchainFlags} />
 
       <div className="rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 md:p-8">
@@ -1224,7 +1366,7 @@ function ContractPanel({ result }: { result: ContractScanResult }) {
           <p className="font-mono text-sm break-all text-white flex-1">{result.contractId}</p>
           <CopyButton text={result.contractId} />
           <a
-            href={`https://stellar.expert/explorer/public/contract/${result.contractId}`}
+            href={`https://stellar.expert/explorer/${result.network === "mainnet" ? "public" : "testnet"}/contract/${result.contractId}`}
             target="_blank" rel="noopener noreferrer"
             className="p-1.5 text-sentio-text-muted hover:text-white transition-colors"
           >
@@ -1326,6 +1468,7 @@ type SearchState =
   | {
       status: "done";
       mode: "account" | "asset" | "contract";
+      network: "mainnet" | "testnet";
       account?: HorizonAccount;
       asset?: HorizonAsset;
       contractResult?: ContractScanResult;
@@ -1383,7 +1526,7 @@ export default function Explorer() {
         }
         const contractResult: ContractScanResult = await res.json();
         setState({
-          status: "done", mode: "contract",
+          status: "done", mode: "contract", network: activeNetwork,
           contractResult,
           txns: [], ops: [], onchainHistory: [], onchainFlags: [], scanResult: null, ledger: null,
         });
@@ -1443,7 +1586,7 @@ export default function Explorer() {
         }
       }
 
-      setState({ status: "done", mode, account, asset, txns, ops, onchainHistory, onchainFlags, scanResult, ledger });
+      setState({ status: "done", mode, network: activeNetwork, account, asset, txns, ops, onchainHistory, onchainFlags, scanResult, ledger });
     } catch (err) {
       setState({
         status: "error",
@@ -1498,13 +1641,23 @@ export default function Explorer() {
         <BrandMark to="/" size="lg" />
         <div className="flex items-center gap-3">
           <NetworkToggle />
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
+          {state.status !== "idle" ? (
+            <button
+              onClick={reset}
+              className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
+          ) : (
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-xl border border-foreground/10 bg-sentio-surface/90 px-4 py-2.5 text-sm font-medium text-sentio-text-secondary shadow-sentio-sm backdrop-blur-md transition hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          )}
         </div>
       </header>
 
@@ -1570,14 +1723,19 @@ export default function Explorer() {
         </form>
         {state.status === "idle" && (
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {[
-              { label: "Example account",  value: "GDUKMGUGDZQK6YHYA5Z6AY2G4XDSZPSZ3SW5UN3ARVMO6QSRDWP5YLEX" },
-              { label: "USDC asset",       value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "AQUA asset",       value: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
-              { label: "Contract scan",   value: "CBLVG2GABTSV33NNJZYV62OLH4VEDNQNTEMC7ONS3IGFMS2T5BRZPQ33" },
-            ].map(({ label, value }) => (
+            {(network === "mainnet" ? [
+              { label: "Kraken (mainnet)",  value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+              { label: "USDC (mainnet)",    value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+              { label: "AQUA (mainnet)",    value: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
+              { label: "Contract (mainnet)", value: "CBGSBKYMYO6OMGHQXXNOBRGVUDFUDVC2XLC3SXON5R2SNXILR7XCKKY3" },
+            ] : [
+              { label: "Account (testnet)",  value: "GCEYSSZIJJMOQFWY56MDVD4CKTNFG2YZAKPHZSD73PH3M7MOTPFQ647K" },
+              { label: "USDC (testnet)",     value: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
+              { label: "Asset (testnet)",    value: "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B" },
+              { label: "Contract (testnet)", value: "CBC3O34F5LTUUUSWOXTHL7QLZWCTNUYCNNL4V4F2EU5DAZ3A264UNOYA" },
+            ]).map(({ label, value }) => (
               <button
-                key={value}
+                key={label}
                 onClick={() => { setQuery(value); handleSearch(value); }}
                 className="rounded-xl border border-foreground/8 bg-sentio-surface/50 px-3 py-2 text-xs text-sentio-text-muted transition hover:text-foreground hover:bg-white/5 active:scale-95"
               >
@@ -1645,10 +1803,21 @@ export default function Explorer() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="max-w-5xl mx-auto mt-8 w-full"
           >
-            {state.mode !== "contract" && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-foreground/8 bg-sentio-surface/60 px-5 py-3">
-                <div className="flex flex-wrap items-center gap-4 text-xs text-sentio-text-muted">
-                  {state.ledger ? (
+            {/* Network badge — always shown for every result type */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-foreground/8 bg-sentio-surface/60 px-5 py-3">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-sentio-text-muted">
+                {/* Network the result was fetched on */}
+                <span className={[
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-bold uppercase tracking-widest",
+                  state.network === "mainnet"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400",
+                ].join(" ")}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${state.network === "mainnet" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                  {state.network === "mainnet" ? "Mainnet" : "Testnet"}
+                </span>
+                {state.mode !== "contract" && (
+                  state.ledger ? (
                     <>
                       <span className="flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 rounded-full bg-sentio-success inline-block" />
@@ -1659,32 +1828,32 @@ export default function Explorer() {
                     </>
                   ) : (
                     <span className="text-sentio-text-muted">Network stats unavailable</span>
-                  )}
-                </div>
-                {state.mode === "account" && (
-                  <div className="flex items-center gap-2">
-                    {streamStatus === "live" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-sentio-success/30 bg-sentio-success/10 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-success">
-                        <Wifi className="h-3 w-3" />
-                        Live
-                        <span className="h-1.5 w-1.5 rounded-full bg-sentio-success animate-pulse" />
-                      </span>
-                    )}
-                    {streamStatus === "stopped" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-text-muted">
-                        <WifiOff className="h-3 w-3" />
-                        Stream ended
-                      </span>
-                    )}
-                    {lastTxId && (
-                      <span className="text-[0.6rem] text-sentio-text-muted font-mono">
-                        last tx: {lastTxId.slice(0, 8)}…
-                      </span>
-                    )}
-                  </div>
+                  )
                 )}
               </div>
-            )}
+              {state.mode === "account" && (
+                <div className="flex items-center gap-2">
+                  {streamStatus === "live" && (
+                    <span className="flex items-center gap-1.5 rounded-full border border-sentio-success/30 bg-sentio-success/10 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-success">
+                      <Wifi className="h-3 w-3" />
+                      Live
+                      <span className="h-1.5 w-1.5 rounded-full bg-sentio-success animate-pulse" />
+                    </span>
+                  )}
+                  {streamStatus === "stopped" && (
+                    <span className="flex items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-widest text-sentio-text-muted">
+                      <WifiOff className="h-3 w-3" />
+                      Stream ended
+                    </span>
+                  )}
+                  {lastTxId && (
+                    <span className="text-[0.6rem] text-sentio-text-muted font-mono">
+                      last tx: {lastTxId.slice(0, 8)}…
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {state.mode === "account" && state.account && (
               <AccountPanel

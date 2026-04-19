@@ -86,6 +86,8 @@ export async function analyzeContract(contractId, { signal, network = "testnet" 
     console.log("[analyzer] expertData:", JSON.stringify(expertData));
   }
 
+  const label = isMainnet ? "Mainnet" : "Testnet";
+
   const [transactions, events] = await Promise.all([
     getTransactions(startLedger, { signal, limit: 200, rpcUrl }),
     getEvents(startLedger, contractId, { signal, limit: 100, rpcUrl }).catch((e) => {
@@ -93,6 +95,14 @@ export async function analyzeContract(contractId, { signal, network = "testnet" 
       return [];
     }),
   ]);
+
+  // Hard segregation: if we have no expert data AND no on-chain events for this
+  // network, the contract does not exist here. Throw so the handler returns 404.
+  if (!expertData && events.length === 0) {
+    const err = new Error(`Contract not found on ${label}. Make sure you are on the correct network.`);
+    err.status = 404;
+    throw err;
+  }
 
   const contractTxHashes = new Set(events.map((e) => e.txHash).filter(Boolean));
 
