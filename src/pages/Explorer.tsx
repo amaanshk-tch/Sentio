@@ -13,7 +13,7 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger,
-  type HorizonAccount, type HorizonAsset, type HorizonTransaction, type HorizonOperation, type LedgerStats,
+  type HorizonAccount, type HorizonAsset, type HorizonTransaction, type HorizonOperation, type LedgerStats, type NetworkType
 } from "@/lib/stellar";
 
 export interface OnchainRisk {
@@ -1337,14 +1337,16 @@ type SearchState =
 export default function Explorer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [network, setNetwork] = useState<NetworkType>((searchParams.get("network") as NetworkType) || "testnet");
   const [state, setState] = useState<SearchState>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSearch = useCallback(async (q: string) => {
+  const handleSearch = useCallback(async (q: string, overrideNetwork?: NetworkType) => {
+    const activeNetwork = overrideNetwork ?? network;
     const trimmed = q.trim();
     if (!trimmed) return;
 
-    setSearchParams({ q: trimmed }, { replace: true });
+    setSearchParams({ q: trimmed, network: activeNetwork }, { replace: true });
     setState({ status: "loading" });
 
     if (trimmed.toUpperCase() === "XLM") {
@@ -1382,14 +1384,14 @@ export default function Explorer() {
         return;
       }
 
-      const { mode, account, asset } = await searchStellar(trimmed);
+      const { mode, account, asset } = await searchStellar(trimmed, activeNetwork);
       let txns: HorizonTransaction[] = [];
       let ops: HorizonOperation[] = [];
 
       if (mode === "account" && account) {
         [txns, ops] = await Promise.all([
-          fetchAccountTransactions(account.account_id, 10),
-          fetchAccountOperations(account.account_id, 10),
+          fetchAccountTransactions(account.account_id, 10, activeNetwork),
+          fetchAccountOperations(account.account_id, 10, activeNetwork),
         ]);
       } else if (!asset) {
         throw new Error("No results found.");
@@ -1424,7 +1426,7 @@ export default function Explorer() {
             fetch(`/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
             fetch(`/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] }),
             scanResPromise,
-            fetchLatestLedger(),
+            fetchLatestLedger(activeNetwork),
           ]);
           onchainHistory = histRes.history || [];
           onchainFlags   = flagsRes.flags  || [];
@@ -1442,18 +1444,18 @@ export default function Explorer() {
         message: err instanceof Error ? err.message : "Unknown error",
       });
     }
-  }, [setSearchParams]);
+  }, [setSearchParams, network]);
 
   useEffect(() => {
     const q = searchParams.get("q");
-    if (q) handleSearch(q);
+    if (q) handleSearch(q, network);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = () => {
     setState({ status: "idle" });
     setQuery("");
-    setSearchParams({}, { replace: true });
+    setSearchParams({ network }, { replace: true });
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -1504,6 +1506,22 @@ export default function Explorer() {
       </div>
 
       <div className="mb-10 max-w-2xl mx-auto">
+        <div className="flex bg-sentio-surface/40 p-1 rounded-xl w-fit mx-auto mb-4 border border-foreground/5 items-center">
+          <button 
+            type="button"
+            onClick={() => { setNetwork("mainnet"); reset(); setSearchParams({ network: "mainnet" }, { replace: true }); }}
+            className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${network === "mainnet" ? "bg-primary text-primary-foreground shadow-sentio-sm" : "text-sentio-text-muted hover:text-white"}`}
+          >
+            Mainnet
+          </button>
+          <button 
+            type="button"
+            onClick={() => { setNetwork("testnet"); reset(); setSearchParams({ network: "testnet" }, { replace: true }); }}
+            className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${network === "testnet" ? "bg-primary text-primary-foreground shadow-sentio-sm" : "text-sentio-text-muted hover:text-white"}`}
+          >
+            Testnet
+          </button>
+        </div>
         <form
           onSubmit={(e) => { e.preventDefault(); handleSearch(query); }}
           className="flex flex-col sm:flex-row gap-2 shadow-sentio-lg rounded-2xl"

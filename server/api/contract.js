@@ -1,5 +1,5 @@
 import { analyzeContract } from "../soroban/analyzer.js";
-import { computeContractRisk } from "../soroban/riskEngine.js";
+import { computeContractRisk } from "../soroban/contractRisk.js";
 import { buildInsights, buildSummary, buildRecommendation } from "../soroban/insights.js";
 import { cacheGet, cacheSet } from "../utils/cache.js";
 
@@ -18,8 +18,6 @@ export async function contractScanHandler(req, res) {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 14_000);
     try {
-      const onchainData = null;
-
       const data     = await analyzeContract(query, { signal: controller.signal });
       const risk     = computeContractRisk(data);
       const insights = buildInsights(risk.flags);
@@ -57,7 +55,6 @@ export async function contractScanHandler(req, res) {
           history: risk.history,
         },
         confidence: risk.confidence,
-        onchainRiskData: onchainData,
       };
 
       cacheSet(cacheKey, result);

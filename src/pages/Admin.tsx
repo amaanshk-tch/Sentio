@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
@@ -13,6 +13,39 @@ export default function Admin() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletVerified, setWalletVerified] = useState(false);
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const performLogout = useCallback(() => {
+    setToken("");
+    tokenRef.current = "";
+    setUnlocked(false);
+    setWalletAddress(null);
+    setWalletVerified(false);
+  }, []);
+
+  const resetIdleTimer = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (!unlocked) return;
+    timeoutRef.current = setTimeout(() => {
+      performLogout();
+      toast("Session expired due to inactivity.");
+    }, 15 * 60 * 1000); // 15 mins idle timeout
+  }, [unlocked, performLogout]);
+
+  useEffect(() => {
+    if (!unlocked) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      return;
+    }
+    const events = ['mousemove', 'keydown', 'click', 'scroll'];
+    events.forEach(e => window.addEventListener(e, resetIdleTimer));
+    resetIdleTimer();
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      events.forEach(e => window.removeEventListener(e, resetIdleTimer));
+    };
+  }, [unlocked, resetIdleTimer]);
 
   const handleUnlock = async () => {
     if (!token.trim()) return;
@@ -265,7 +298,7 @@ export default function Admin() {
               )}
             </div>
             <button
-              onClick={() => { setToken(""); tokenRef.current = ""; setUnlocked(false); setWalletAddress(null); setWalletVerified(false); }}
+              onClick={performLogout}
               className="text-xs text-sentio-text-muted hover:text-foreground transition-colors"
             >
               Sign out

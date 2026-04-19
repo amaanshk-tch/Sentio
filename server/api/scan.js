@@ -52,6 +52,7 @@ export async function runScan(query, { signal, prevScore = null } = {}) {
 
   const onchainHistoryPromise = getOnchainHistory(accountId);
   const onchainFlagsPromise   = getOnchainFlags(accountId);
+  const onchainRiskPromise    = getOnchainRisk(accountId);
 
   const txRecentPromise = fetchJson(
     `${activeHorizon}/accounts/${encodeURIComponent(accountId)}/transactions?order=desc&limit=200`,

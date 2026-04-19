@@ -255,24 +255,33 @@ export async function buildSetRiskTransaction(signerAddress, address, score, con
   return assembled.toXDR();
 }
 
-export async function submitSignedTransaction(signedXdr) {
-  try {
-    const { TransactionBuilder: TB } = await import("@stellar/stellar-sdk");
-    const tx = TB.fromXDR(signedXdr, NETWORK_PASSPHRASE);
-    
-    const ops = tx.operations;
-    const isValid = ops.every(op => {
-      if (op.type !== "invokeHostFunction") return false;
+  export async function submitSignedTransaction(signedXdr) {
+    try {
+      const { TransactionBuilder: TB, StrKey } = await import("@stellar/stellar-sdk");
+      const tx = TB.fromXDR(signedXdr, NETWORK_PASSPHRASE);
       
-      if (op.func && op.func.contractId) {
-        if (op.func.contractId !== CONTRACT_ID) return false;
+      const ops = tx.operations;
+      const isValid = ops.every(op => {
+        if (op.type !== "invokeHostFunction") return false;
+        
+        try {
+          if (!op.func || !op.func.invokeContract) return false;
+          const ic = op.func.invokeContract();
+          const addr = ic.contractAddress();
+          if (!addr || !addr.contractId) return false;
+          
+          const extractedId = StrKey.encodeContract(addr.contractId());
+          if (extractedId !== CONTRACT_ID) return false;
+        } catch (e) {
+          return false;
+        }
+        
+        return true;
+      });
+  
+      if (!isValid) {
+        return { success: false, reason: "Forbidden: Transaction contains operations not targeting the risk registry contract." };
       }
-      return true;
-    });
-
-    if (!isValid) {
-      return { success: false, reason: "Forbidden: Transaction contains operations not targeting the risk registry contract." };
-    }
 
     const response = await rpcServer.sendTransaction(tx);
     if (response.status === "PENDING" || response.status === "SUCCESS") {
