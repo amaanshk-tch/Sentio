@@ -59,6 +59,9 @@ jobs:
       - name: Run Linter
         run: npm run lint
 
+      - name: Test Frontend
+        run: npm run test
+
       - name: Build Application
         run: npm run build
 
