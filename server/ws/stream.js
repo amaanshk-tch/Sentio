@@ -10,15 +10,24 @@ const ipConnectionCount = new Map();
 
 // Module-level wss reference for broadcasting
 let _wss = null;
+let broadcastTimer = null;
+let pendingCount = null;
 
 export function broadcastUserCount(total) {
   if (!_wss) return;
-  const msg = JSON.stringify({ type: "user_count", total });
-  _wss.clients.forEach(client => {
-    if (client.readyState === 1) { // WebSocket.OPEN
-      try { client.send(msg); } catch {}
-    }
-  });
+  pendingCount = total;
+  if (broadcastTimer) return; // debounce: only send once per 2 seconds
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = null;
+    if (pendingCount === null) return;
+    const msg = JSON.stringify({ type: "user_count", total: pendingCount });
+    pendingCount = null;
+    _wss.clients.forEach(client => {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        try { client.send(msg); } catch {}
+      }
+    });
+  }, 2000);
 }
 
 export function setupWebSocket(wss) {

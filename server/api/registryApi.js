@@ -3,6 +3,8 @@ import {
   getOnchainFlags, 
   buildFlagTransaction,
   buildSetRiskTransaction,
+  buildClearFlagsTransaction,
+  buildRemoveRiskTransaction,
   submitSignedTransaction,
 } from "../soroban/registry.js";
 
@@ -126,6 +128,68 @@ export async function submitHandler(req, res) {
     return result.success ? res.json(result) : res.status(400).json(result);
   } catch (err) {
     console.error("[submitHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+export async function clearFlagsHandler(req, res) {
+  const { address, signerAddress } = req.body;
+  if (!address || !signerAddress) {
+    return res.status(400).json({ error: "Missing required fields." });
+  }
+  if (!isValidAddress(address)) {
+    return res.status(400).json({ error: "Invalid address format." });
+  }
+  if (!ACCOUNT_RE.test(signerAddress)) {
+    return res.status(400).json({ error: "Invalid signer address." });
+  }
+
+  const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
+  if (!ADMIN_ADDRESS) {
+    return res.status(500).json({ error: "Server admin address not configured." });
+  }
+  if (signerAddress !== ADMIN_ADDRESS) {
+    return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
+  }
+
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
+
+  try {
+    const unsignedXdr = await buildClearFlagsTransaction(signerAddress, targetAddress);
+    return res.json({ unsignedXdr });
+  } catch (err) {
+    console.error("[clearFlagsHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+export async function removeRiskHandler(req, res) {
+  const { address, signerAddress } = req.body;
+  if (!address || !signerAddress) {
+    return res.status(400).json({ error: "Missing required fields." });
+  }
+  if (!isValidAddress(address)) {
+    return res.status(400).json({ error: "Invalid address format." });
+  }
+  if (!ACCOUNT_RE.test(signerAddress)) {
+    return res.status(400).json({ error: "Invalid signer address." });
+  }
+
+  const ADMIN_ADDRESS = process.env.SENTIO_ADMIN_ADDRESS;
+  if (!ADMIN_ADDRESS) {
+    return res.status(500).json({ error: "Server admin address not configured." });
+  }
+  if (signerAddress !== ADMIN_ADDRESS) {
+    return res.status(403).json({ error: "Not authorized. Connected wallet is not the contract admin." });
+  }
+
+  const targetAddress = ASSET_RE.test(address) ? address.split(":")[1] : address;
+
+  try {
+    const unsignedXdr = await buildRemoveRiskTransaction(signerAddress, targetAddress);
+    return res.json({ unsignedXdr });
+  } catch (err) {
+    console.error("[removeRiskHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
   }
 }

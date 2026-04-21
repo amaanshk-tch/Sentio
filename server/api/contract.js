@@ -52,7 +52,14 @@ export async function contractScanHandler(req, res) {
         riskBreakdown: Object.fromEntries((risk.flags ?? []).map(f => [f, true])),
         events: {
           categories: data.eventCategories,
-          raw: data.rawEvents,
+          raw: (data.rawEvents || []).map(e => ({
+            // Whitelist only the fields you actually display in the UI
+            ledger: typeof e.ledger === "number" ? e.ledger : null,
+            txHash: typeof e.txHash === "string" ? e.txHash.slice(0, 64) : null,
+            type:   typeof e.type   === "string" ? e.type.slice(0, 32) : null,
+            // Do NOT forward e.value, e.topic raw objects — convert to strings first
+            topic:  Array.isArray(e.topic) ? e.topic.map(t => String(t).slice(0, 64)) : [],
+          }))
         },
         trend: {
           direction: risk.trend,

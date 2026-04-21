@@ -206,6 +206,56 @@ export async function buildSetRiskTransaction(signerAddress, address, score, con
   return assembled.toXDR();
 }
 
+export async function buildClearFlagsTransaction(signerAddress, address) {
+  if (!CONTRACT_ID) throw new Error("No contract configured.");
+  const contract = new Contract(CONTRACT_ID);
+  const sourceAccount = await loadAccount(signerAddress, "testnet");
+
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: "1000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(
+      "clear_flags",
+      nativeToScVal(address, { type: "address" })
+    ))
+    .setTimeout(30)
+    .build();
+
+  const sim = await rpcServer.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(sim)) {
+    throw new Error("Simulation failed: " + JSON.stringify(sim));
+  }
+
+  const assembled = rpc.assembleTransaction(tx, sim).build();
+  return assembled.toXDR();
+}
+
+export async function buildRemoveRiskTransaction(signerAddress, address) {
+  if (!CONTRACT_ID) throw new Error("No contract configured.");
+  const contract = new Contract(CONTRACT_ID);
+  const sourceAccount = await loadAccount(signerAddress, "testnet");
+
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: "1000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(
+      "remove_risk",
+      nativeToScVal(address, { type: "address" })
+    ))
+    .setTimeout(30)
+    .build();
+
+  const sim = await rpcServer.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(sim)) {
+    throw new Error("Simulation failed: " + JSON.stringify(sim));
+  }
+
+  const assembled = rpc.assembleTransaction(tx, sim).build();
+  return assembled.toXDR();
+}
+
 export async function submitSignedTransaction(signedXdr) {
   try {
     const { TransactionBuilder: TB, StrKey, xdr: StellarXdr } = await import("@stellar/stellar-sdk");

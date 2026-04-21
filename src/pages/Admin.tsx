@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, Copy } from "lucide-react";
+import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, Copy, Eraser, Trash2 } from "lucide-react";
 import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
 import { useNetwork } from "@/contexts/NetworkContext";
@@ -203,6 +203,64 @@ export default function Admin() {
       toast.error(err instanceof Error ? err.message : "Failed to flag.");
     } finally {
       setIsFlagging(false);
+    }
+  };
+
+  const [clearAddress, setClearAddress] = useState("");
+  const [isClearing, setIsClearing] = useState(false);
+  const [lastClearHash, setLastClearHash] = useState<string | null>(null);
+
+  const handleClearFlags = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
+    setIsClearing(true);
+    try {
+      const res = await fetch("/api/registry/clear-flags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
+        body: JSON.stringify({ address: clearAddress, signerAddress: walletAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? "Failed."); return; }
+      const submitted = await signAndSubmit(data.unsignedXdr);
+      if (submitted) { 
+        toast.success("Flags cleared."); 
+        setClearAddress(""); 
+        setLastClearHash(submitted.hash);
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  const [removeAddress, setRemoveAddress] = useState("");
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [lastRemoveHash, setLastRemoveHash] = useState<string | null>(null);
+
+  const handleRemoveRisk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
+    setIsRemoving(true);
+    try {
+      const res = await fetch("/api/registry/remove-risk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
+        body: JSON.stringify({ address: removeAddress, signerAddress: walletAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? "Failed."); return; }
+      const submitted = await signAndSubmit(data.unsignedXdr);
+      if (submitted) { 
+        toast.success("Risk record removed."); 
+        setRemoveAddress(""); 
+        setLastRemoveHash(submitted.hash);
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -423,6 +481,82 @@ export default function Admin() {
                     <button
                       type="button"
                       onClick={() => { navigator.clipboard.writeText(lastFlagHash); toast.success("Hash copied!"); }}
+                      className="shrink-0 rounded-lg p-2 text-sentio-success hover:bg-sentio-success/20 transition"
+                      title="Copy Hash"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
+              <div className="flex items-center gap-2">
+                <Eraser className="h-5 w-5 text-sentio-success" />
+                <h2 className="text-xl font-bold">Clear Flags</h2>
+              </div>
+              <p className="text-sm text-sentio-text-muted">
+                Remove all flags for a specific address. Freighter will prompt you to sign.
+              </p>
+              <form onSubmit={handleClearFlags} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-sentio-text-secondary mb-1">Target Address</label>
+                  <input type="text" required value={clearAddress} onChange={e => setClearAddress(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-2.5 px-3 text-sm font-mono outline-none focus:border-primary"
+                    placeholder="G..." />
+                </div>
+                <button type="submit" disabled={isClearing}
+                  className="mt-2 w-full rounded-xl bg-sentio-success px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                  {isClearing ? "Waiting for Freighter..." : "Clear Flags"}
+                </button>
+                {lastClearHash && (
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-sentio-success/20 bg-sentio-success/10 p-3">
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-bold text-sentio-success uppercase tracking-wider mb-0.5">Transaction Hash</span>
+                      <span className="truncate font-mono text-xs text-sentio-text-secondary" title={lastClearHash}>{lastClearHash}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(lastClearHash); toast.success("Hash copied!"); }}
+                      className="shrink-0 rounded-lg p-2 text-sentio-success hover:bg-sentio-success/20 transition"
+                      title="Copy Hash"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className={`rounded-2xl border border-foreground/8 bg-sentio-elevated/80 p-6 space-y-4 transition-opacity ${!walletVerified ? "opacity-50 pointer-events-none" : ""}`}>
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-sentio-danger" />
+                <h2 className="text-xl font-bold">Remove Risk Record</h2>
+              </div>
+              <p className="text-sm text-sentio-text-muted">
+                Delete the entire risk assessment record for an address. Freighter will prompt you to sign.
+              </p>
+              <form onSubmit={handleRemoveRisk} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-sentio-text-secondary mb-1">Target Address</label>
+                  <input type="text" required value={removeAddress} onChange={e => setRemoveAddress(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/10 bg-sentio-surface/80 py-2.5 px-3 text-sm font-mono outline-none focus:border-primary"
+                    placeholder="G..." />
+                </div>
+                <button type="submit" disabled={isRemoving}
+                  className="mt-2 w-full rounded-xl bg-sentio-danger px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                  {isRemoving ? "Waiting for Freighter..." : "Remove Risk Record"}
+                </button>
+                {lastRemoveHash && (
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-sentio-success/20 bg-sentio-success/10 p-3">
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-bold text-sentio-success uppercase tracking-wider mb-0.5">Transaction Hash</span>
+                      <span className="truncate font-mono text-xs text-sentio-text-secondary" title={lastRemoveHash}>{lastRemoveHash}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(lastRemoveHash); toast.success("Hash copied!"); }}
                       className="shrink-0 rounded-lg p-2 text-sentio-success hover:bg-sentio-success/20 transition"
                       title="Copy Hash"
                     >

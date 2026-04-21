@@ -211,9 +211,10 @@ function buildAgeEntry(ageDays) {
   let status = "Unknown";
   let tone   = "slate";
   if (ageDays != null) {
-    if (ageDays < 14)  { status = "New";         tone = "rose";    }
-    else if (ageDays < 90) { status = "Growing"; tone = "amber";   }
-    else               { status = "Established"; tone = "emerald"; }
+    if (ageDays < 14)   { status = "New";         tone = "rose";    }
+    else if (ageDays < 90)  { status = "Growing"; tone = "amber";   }
+    else if (ageDays < 365) { status = "Maturing"; tone = "sky";    } // ADD this tier
+    else                { status = "Established";  tone = "emerald"; } // Requires 1 year
   }
   return { key: "age", title: "Account Age", value, status, tone, flag };
 }

@@ -8,7 +8,7 @@ import { rateLimitMiddleware } from "./utils/rateLimit.js";
 import { requireAdminToken } from "./utils/auth.js";
 import { scanHandler } from "./api/scan.js";
 import { contractScanHandler } from "./api/contract.js";
-import { historyHandler, flagsHandler, reportHandler, setRiskHandler, submitHandler } from "./api/registryApi.js";
+import { historyHandler, flagsHandler, reportHandler, setRiskHandler, clearFlagsHandler, removeRiskHandler, submitHandler } from "./api/registryApi.js";
 import { connectUserHandler, logSearchHandler, getSearchHistoryHandler, listUsersHandler, getUserCountHandler } from "./api/users.js";
 import { setupWebSocket } from "./ws/stream.js";
 
@@ -36,7 +36,29 @@ if (trustProxy) {
 } else {
   app.set("trust proxy", false);
 }
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],       // add "'unsafe-inline'" only if Vite build requires it
+      styleSrc:  ["'self'", "'unsafe-inline'"],
+      imgSrc:    ["'self'", "data:", "https:"],
+      connectSrc: [
+        "'self'",
+        "https://horizon.stellar.org",
+        "https://horizon-testnet.stellar.org",
+        "https://soroban-testnet.stellar.org",
+        "https://soroban-rpc.mainnet.stellar.gateway.fm",
+        "https://api.stellar.expert",
+        "wss:", // for WebSocket
+      ],
+      fontSrc:   ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // may need to disable for Freighter extension
+}));
 
 app.use(cors({
   origin: ALLOWED_ORIGIN,
@@ -77,9 +99,11 @@ app.post("/api/registry/verify-admin", requireAdminToken, (req, res) => {
   return res.json({ authorized: true });
 });
 
-app.post("/api/registry/report",   requireAdminToken, rateLimitMiddleware("admin-write", 5), reportHandler);
-app.post("/api/registry/set-risk", requireAdminToken, rateLimitMiddleware("admin-write", 5), setRiskHandler);
-app.post("/api/registry/submit",   requireAdminToken, rateLimitMiddleware("admin-write", 5), submitHandler);
+app.post("/api/registry/report",      requireAdminToken, rateLimitMiddleware("admin-write", 5), reportHandler);
+app.post("/api/registry/set-risk",    requireAdminToken, rateLimitMiddleware("admin-write", 5), setRiskHandler);
+app.post("/api/registry/clear-flags", requireAdminToken, rateLimitMiddleware("admin-write", 5), clearFlagsHandler);
+app.post("/api/registry/remove-risk", requireAdminToken, rateLimitMiddleware("admin-write", 5), removeRiskHandler);
+app.post("/api/registry/submit",      requireAdminToken, rateLimitMiddleware("admin-write", 5), submitHandler);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 

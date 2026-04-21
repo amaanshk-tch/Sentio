@@ -2,6 +2,10 @@ import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
 import { HORIZON_URL, HORIZON_MAINNET_URL, SOROBAN_RPC_URL, SOROBAN_RPC_MAINNET_URL } from "../config.js";
 import { verifyHomeDomain } from "../riskEngine.js";
 
+// Stellar's target ledger close time. Mainnet and Testnet both target ~5 seconds.
+// If Stellar changes this, update here.
+const LEDGERS_PER_DAY = 5 * 60 * 24; // 17,280 ledgers/day at 5s close time
+
 async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });
   if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
@@ -144,7 +148,7 @@ export async function analyzeContract(contractId, { signal, network = "testnet" 
   const eventLedgers = events.map((e) => Number(e.ledger || 0)).filter(Boolean);
   const firstSeen    = Math.min(currentLedger + 1, ...txLedgers, ...eventLedgers);
   const ledgersOld   = firstSeen < currentLedger ? currentLedger - firstSeen : 0;
-  const ageDays      = Math.floor(ledgersOld / (5 * 60 * 24));
+  const ageDays      = Math.floor(ledgersOld / LEDGERS_PER_DAY);
 
   const actualDeployer  = expertData?.creator || expertData?.deployer || null;
   const deployerInfo    = await analyzeDeployer(actualDeployer, { signal, network });
