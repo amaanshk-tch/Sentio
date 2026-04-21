@@ -153,7 +153,10 @@ export function setupWebSocket(wss) {
       } catch {}
     });
 
+    let released = false;
     function releaseConnection() {
+      if (released) return; // guard against double-call
+      released = true;
       cleanup();
       activeConnections = Math.max(0, activeConnections - 1);
       const current = ipConnectionCount.get(ip) ?? 1;
