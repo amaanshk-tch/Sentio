@@ -39,6 +39,7 @@ pub struct FlagRingBuffer {
 #[contracttype]
 pub enum DataKey {
     Admin,
+    PendingAdmin,
     Risk(Address),
     RiskHistory(Address),
     Flags(Address),
@@ -63,6 +64,24 @@ impl RiskRegistry {
             .instance()
             .get(&DataKey::Admin)
             .expect("Admin not set")
+    }
+
+    pub fn propose_admin(env: Env, new_admin: Address) {
+        let current_admin = Self::get_admin(&env);
+        current_admin.require_auth();
+        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.storage().instance().extend_ttl(MIN_TTL, EXTEND_TTL);
+    }
+
+    pub fn accept_admin(env: Env) {
+        let pending: Address = env.storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .expect("No pending admin");
+        pending.require_auth();
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        env.storage().instance().extend_ttl(MIN_TTL, EXTEND_TTL);
     }
 
     pub fn set_risk(env: Env, addr: Address, score: u32, confidence: u32, category: String) {
@@ -125,10 +144,6 @@ impl RiskRegistry {
                 .extend_ttl(&key, MIN_TTL, EXTEND_TTL);
             env.storage().persistent().get(&key)
         } else {
-            env.events().publish(
-                (Symbol::new(&env, "expiry_miss"), addr),
-                Symbol::new(&env, "risk"),
-            );
             None
         }
     }
@@ -136,10 +151,6 @@ impl RiskRegistry {
     pub fn get_history(env: Env, addr: Address) -> Vec<RiskData> {
         let key = DataKey::RiskHistory(addr.clone());
         if !env.storage().persistent().has(&key) {
-            env.events().publish(
-                (Symbol::new(&env, "expiry_miss"), addr),
-                Symbol::new(&env, "history"),
-            );
             return Vec::new(&env);
         }
         env.storage()
@@ -208,10 +219,6 @@ impl RiskRegistry {
     pub fn get_flags(env: Env, addr: Address) -> Vec<Flag> {
         let key = DataKey::Flags(addr.clone());
         if !env.storage().persistent().has(&key) {
-            env.events().publish(
-                (Symbol::new(&env, "expiry_miss"), addr),
-                Symbol::new(&env, "flags"),
-            );
             return Vec::new(&env);
         }
         env.storage()

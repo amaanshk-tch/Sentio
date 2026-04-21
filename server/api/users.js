@@ -2,11 +2,11 @@ import mysql from "mysql2/promise";
 import { broadcastUserCount } from "../ws/stream.js";
 
 const pool = mysql.createPool({
-  host:     process.env.MYSQL_HOST     || "localhost",
-  port:     parseInt(process.env.MYSQL_PORT || "3306"),
-  user:     process.env.MYSQL_USER     || "root",
-  password: process.env.MYSQL_PASSWORD || "",
-  database: process.env.MYSQL_DATABASE || "sentio_db",
+  host:     process.env.MYSQL_HOST,
+  port:     parseInt(process.env.MYSQL_PORT),
+  user:     process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
   connectionLimit:    10,
   queueLimit:         0,
@@ -120,12 +120,19 @@ export async function getSearchHistoryHandler(req, res) {
 
 // GET /api/users/list — admin only
 export async function listUsersHandler(req, res) {
+  const page  = Math.max(1, parseInt(req.query.page  || "1",  10));
+  const limit = Math.min(200, parseInt(req.query.limit || "50", 10));
+  const offset = (page - 1) * limit;
+
   const conn = await pool.getConnection();
   try {
+    const [[{ total }]] = await conn.execute("SELECT COUNT(*) as total FROM users");
     const [users] = await conn.execute(
-      "SELECT * FROM users ORDER BY connectedAt DESC"
+      `SELECT walletAddress, network, connectedAt, lastSeen, scanCount
+       FROM users ORDER BY connectedAt DESC LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
-    return res.json({ total: users.length, users });
+    return res.json({ total, page, limit, users });
   } catch (err) {
     console.error("[listUsersHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
