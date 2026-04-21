@@ -57,7 +57,7 @@ app.post("/api/users/connect",              rateLimitMiddleware("registry-read",
 app.post("/api/users/search",               rateLimitMiddleware("registry-read", 60), logSearchHandler);
 app.get("/api/users/history/:walletAddress", rateLimitMiddleware("registry-read", 60), getSearchHistoryHandler);
 app.get("/api/users/list",                  requireAdminToken, listUsersHandler);
-app.get("/api/users/count",                 getUserCountHandler);
+app.get("/api/users/count",                 rateLimitMiddleware("registry-read", 60), getUserCountHandler);
 
 app.get("/api/registry/history/:address", rateLimitMiddleware("registry-read", 60), historyHandler);
 app.get("/api/registry/flags/:address",   rateLimitMiddleware("registry-read", 60), flagsHandler);
