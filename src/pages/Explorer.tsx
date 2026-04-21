@@ -10,6 +10,8 @@ import {
 import { Link } from "react-router-dom";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { PageLayout } from "@/components/layout/PageLayout";
+import { WalletConnect } from "@/components/ui/WalletConnect";
+import { useWallet } from "@/contexts/WalletContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger,
@@ -108,14 +110,17 @@ function useLiveStream(
   accountId: string | null,
   network: "mainnet" | "testnet",
   onUpdate: (patch: Partial<ScanResult>) => void,
+  onUserCount?: (total: number) => void,
 ): { status: StreamStatus; lastTxId: string | null } {
   const wsRef   = useRef<WebSocket | null>(null);
   const [status, setStatus]   = useState<StreamStatus>("idle");
   const [lastTxId, setLastTxId] = useState<string | null>(null);
   const onUpdateRef = useRef(onUpdate);
+  const onUserCountRef = useRef(onUserCount);
   useEffect(() => {
     onUpdateRef.current = onUpdate;
-  }, [onUpdate]);
+    onUserCountRef.current = onUserCount;
+  }, [onUpdate, onUserCount]);
 
   useEffect(() => {
     wsRef.current?.close();
@@ -149,6 +154,8 @@ function useLiveStream(
           onUpdateRef.current(scanPatch as Partial<ScanResult>);
         } else if (msg.type === "stream_stopped") {
           setStatus("stopped");
+        } else if (msg.type === "user_count" && typeof msg.total === "number") {
+          onUserCountRef.current?.(msg.total);
         }
       } catch (err) {
         console.warn("WebSocket parse error", err);
@@ -1486,8 +1493,76 @@ export default function Explorer() {
   const [state, setState] = useState<SearchState>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
   const { network } = useNetwork();
+  const freighter = useWallet();
   // Re-run the search when network changes and a result is already shown
   const lastQueryRef = useRef<string | null>(null);
+  const [userCount, setUserCount] = useState<number | null>(null);
+  const [searchHistory, setSearchHistory] = useState<Array<{
+    scannedAddress: string;
+    network: string;
+    searchedAt: string;
+  }>>([]);
+
+  // Fetch initial user count
+  useEffect(() => {
+    fetch("/api/users/count")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.total != null) setUserCount(data.total); })
+      .catch(() => {});
+  }, []);
+
+  // Real-time update via WebSocket
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data as string);
+        if (msg.type === "user_count" && typeof msg.total === "number") setUserCount(msg.total);
+      } catch {}
+    };
+    return () => ws.close();
+  }, []);
+
+  async function registerWallet(walletKey: string, network: string) {
+  try {
+    const res = await fetch("/api/users/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: walletKey, network }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.total === "number") setUserCount(data.total);
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+async function logSearch(walletKey: string, scannedAddress: string, network: string) {
+  try {
+    await fetch("/api/users/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: walletKey, scannedAddress, network }),
+    });
+  } catch {
+    // Non-critical
+  }
+}
+
+  // Fetch history when wallet connects
+  useEffect(() => {
+    if (!freighter.isConnected || !freighter.publicKey) {
+      setSearchHistory([]);
+      return;
+    }
+    fetch(`/api/users/history/${freighter.publicKey}`)
+      .then(r => r.ok ? r.json() : { history: [] })
+      .then(data => setSearchHistory(data.history || []))
+      .catch(() => {});
+  }, [freighter.isConnected, freighter.publicKey]);
 
   const handleSearch = useCallback(async (q: string, opts?: { network?: string }) => {
     const trimmed = q.trim();
@@ -1587,6 +1662,17 @@ export default function Explorer() {
       }
 
       setState({ status: "done", mode, network: activeNetwork, account, asset, txns, ops, onchainHistory, onchainFlags, scanResult, ledger });
+
+      // Log search history if wallet is connected
+      if (freighter.isConnected && freighter.publicKey) {
+        logSearch(freighter.publicKey, trimmed, activeNetwork);
+        // Update local history for real-time feel
+        setSearchHistory(prev => [{
+          scannedAddress: trimmed,
+          network: activeNetwork,
+          searchedAt: new Date().toISOString()
+        }, ...prev].slice(0, 50));
+      }
     } catch (err) {
       setState({
         status: "error",
@@ -1629,6 +1715,7 @@ export default function Explorer() {
         return { ...prev, scanResult: prev.scanResult ? { ...prev.scanResult, ...patch } : prev.scanResult };
       });
     }, []),
+    useCallback((total: number) => setUserCount(total), []),
   );
 
   const isDone    = state.status === "done";
@@ -1639,6 +1726,22 @@ export default function Explorer() {
       <header className="flex items-center justify-between gap-4 py-5 mb-4">
         <BrandMark to="/" size="lg" />
         <div className="flex items-center gap-3">
+          {userCount !== null && (
+            <div className="hidden sm:flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/8 px-3 py-2">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="text-xs font-bold tabular-nums text-primary">{userCount.toLocaleString()}</span>
+              <span className="text-[0.6rem] font-semibold uppercase tracking-widest text-sentio-text-muted">users</span>
+            </div>
+          )}
+          <WalletConnect
+            onConnected={(key) => {
+              // Register wallet on connect
+              registerWallet(key, network);
+            }}
+          />
           <NetworkToggle />
           {state.status !== "idle" ? (
             <button
@@ -1721,26 +1824,66 @@ export default function Explorer() {
           </button>
         </form>
         {state.status === "idle" && (
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {(network === "mainnet" ? [
-              { label: "Kraken (mainnet)",  value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "USDC (mainnet)",    value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
-              { label: "AQUA (mainnet)",    value: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
-              { label: "Contract (mainnet)", value: "CBGSBKYMYO6OMGHQXXNOBRGVUDFUDVC2XLC3SXON5R2SNXILR7XCKKY3" },
-            ] : [
-              { label: "Account (testnet)",  value: "GCEYSSZIJJMOQFWY56MDVD4CKTNFG2YZAKPHZSD73PH3M7MOTPFQ647K" },
-              { label: "USDC (testnet)",     value: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
-              { label: "Asset (testnet)",    value: "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B" },
-              { label: "Contract (testnet)", value: "CBC3O34F5LTUUUSWOXTHL7QLZWCTNUYCNNL4V4F2EU5DAZ3A264UNOYA" },
-            ]).map(({ label, value }) => (
-              <button
-                key={label}
-                onClick={() => { setQuery(value); handleSearch(value); }}
-                className="rounded-xl border border-foreground/8 bg-sentio-surface/50 px-3 py-2 text-xs text-sentio-text-muted transition hover:text-foreground hover:bg-white/5 active:scale-95"
+          <div className="mt-8 space-y-12">
+            <div>
+              <p className="mb-4 text-center text-xs font-bold uppercase tracking-[0.2em] text-sentio-text-muted">Quick Start</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {(network === "mainnet" ? [
+                  { label: "Kraken (mainnet)",  value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+                  { label: "USDC (mainnet)",    value: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" },
+                  { label: "AQUA (mainnet)",    value: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
+                  { label: "Contract (mainnet)", value: "CBGSBKYMYO6OMGHQXXNOBRGVUDFUDVC2XLC3SXON5R2SNXILR7XCKKY3" },
+                ] : [
+                  { label: "Account (testnet)",  value: "GCEYSSZIJJMOQFWY56MDVD4CKTNFG2YZAKPHZSD73PH3M7MOTPFQ647K" },
+                  { label: "USDC (testnet)",     value: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
+                  { label: "Asset (testnet)",    value: "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B" },
+                  { label: "Contract (testnet)", value: "CBC3O34F5LTUUUSWOXTHL7QLZWCTNUYCNNL4V4F2EU5DAZ3A264UNOYA" },
+                ]).map(({ label, value }) => (
+                  <button
+                    key={label}
+                    onClick={() => { setQuery(value); handleSearch(value); }}
+                    className="rounded-xl border border-foreground/8 bg-sentio-surface/50 px-3 py-2 text-xs text-sentio-text-muted transition hover:text-foreground hover:bg-white/5 active:scale-95"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {searchHistory.length > 0 && freighter.isConnected && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="animate-in fade-in slide-in-from-bottom-2 duration-500"
               >
-                {label}
-              </button>
-            ))}
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-sentio-text-muted flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5" /> Recent Scans
+                  </h3>
+                  <button
+                    onClick={() => setSearchHistory([])}
+                    className="text-[0.65rem] font-bold uppercase tracking-widest text-sentio-text-muted hover:text-sentio-danger transition-colors"
+                  >
+                    Clear History
+                  </button>
+                </div>
+                <div className="flex flex-row flex-wrap gap-2">
+                  {searchHistory.map((item, idx) => (
+                    <button
+                      key={`${item.scannedAddress}-${idx}`}
+                      onClick={() => { setQuery(item.scannedAddress); handleSearch(item.scannedAddress, { network: item.network }); }}
+                      className="group inline-flex items-center gap-2 rounded-xl border border-foreground/6 bg-sentio-surface/40 px-3 py-2 transition-all hover:border-primary/30 hover:bg-sentio-surface/80 active:scale-[0.98]"
+                    >
+                      <div className={`h-2 w-2 shrink-0 rounded-full ${item.network === 'mainnet' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span className="font-mono text-xs text-foreground group-hover:text-primary transition-colors">
+                        {item.scannedAddress.slice(0, 6)}…{item.scannedAddress.slice(-4)}
+                      </span>
+                      <ArrowUpRight className="h-3 w-3 shrink-0 text-sentio-text-muted opacity-0 group-hover:opacity-100 transition-all" />
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
           </div>
         )}
       </div>

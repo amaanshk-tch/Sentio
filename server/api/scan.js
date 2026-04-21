@@ -13,7 +13,7 @@ import {
   computeConfidence,
   computeRisk,
 } from "../riskEngine.js";
-import { getOnchainRisk, setOnchainRisk, getOnchainHistory, getOnchainFlags } from "../soroban/registry.js";
+import { getOnchainRisk, getOnchainHistory, getOnchainFlags } from "../soroban/registry.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -300,15 +300,9 @@ function buildBreakdown({ ageDays, txRecentCount, txPattern, trustlinesCount, tr
 
 // ─── Helper: fire-and-forget onchain risk write ──────────────────────────────
 
-function maybeWriteOnchain(isAsset, address, riskResult, onchainData, confidence) {
-  if (isAsset) return;
-  if (riskResult.score === onchainData?.score) return;
-  if (!shouldWriteOnchain(address)) return;
-  setOnchainRisk(address, {
-    score: riskResult.score,
-    confidence,
-    category: riskResult.risk,
-  }).catch((e) => console.error("[Sentio] On-chain risk logging failed:", e?.message));
+function maybeWriteOnchain() {
+  // Removed: on-chain auto-write required admin private key on server.
+  // All on-chain writes go through admin panel → Freighter signing.
 }
 
 // ─── Helper: fetch all Horizon data in parallel ───────────────────────────────

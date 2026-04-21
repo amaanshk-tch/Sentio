@@ -2,7 +2,6 @@ import {
   rpc, 
   TransactionBuilder, 
   Networks, 
-  Keypair, 
   Contract, 
   nativeToScVal, 
   scValToNative, 
@@ -15,7 +14,6 @@ const RPC_URL = SOROBAN_RPC_URL;
 const NETWORK_PASSPHRASE = SOROBAN_NETWORK_PASSPHRASE;
 // NOTE: Contracts are deployed on testnet. Registry functions always target testnet.
 const CONTRACT_ID = process.env.RISK_REGISTRY_CONTRACT_ID;
-const ADMIN_SECRET = process.env.SENTIO_ADMIN_SECRET;
 
 const rpcServer = new rpc.Server(RPC_URL);
 
@@ -63,53 +61,6 @@ export async function getOnchainRisk(address) {
   }
 }
 
-export async function setOnchainRisk(address, payload) {
-  const { score, confidence = 50, category = "unknown" } = payload;
-  
-  if (!CONTRACT_ID || !ADMIN_SECRET) {
-    return { success: false, reason: "No contract or admin key configured in environment" };
-  }
-
-  try {
-    const adminKp = Keypair.fromSecret(ADMIN_SECRET);
-    const contract = new Contract(CONTRACT_ID);
-    
-    const sourceAccount = await loadAccount(adminKp.publicKey(), "testnet");
-    
-    const tx = new TransactionBuilder(sourceAccount, {
-      fee: "1000",
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(contract.call(
-        "set_risk",
-        nativeToScVal(address, { type: 'address' }),
-        nativeToScVal(score, { type: 'u32' }),
-        nativeToScVal(confidence, { type: 'u32' }),
-        nativeToScVal(category, { type: 'string' })
-      ))
-      .setTimeout(30)
-      .build();
-
-    const sim = await rpcServer.simulateTransaction(tx);
-    if (!rpc.Api.isSimulationSuccess(sim)) {
-      console.error("[Onchain] Simulation failed:", sim);
-      return { success: false, reason: "Simulation failed" };
-    }
-
-    const assembledTx = rpc.assembleTransaction(tx, sim).build();
-    assembledTx.sign(adminKp);
-
-    const response = await rpcServer.sendTransaction(assembledTx);
-    if (response.status === "PENDING" || response.status === "SUCCESS") {
-      return { success: true, hash: response.hash };
-    }
-    
-    return { success: false, reason: response.status };
-  } catch (err) {
-    console.error("[Onchain] set_risk failed:", err.message);
-    return { success: false, reason: err.message };
-  }
-}
 
 export async function getOnchainHistory(address) {
   if (!CONTRACT_ID) return [];

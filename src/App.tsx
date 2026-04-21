@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import { NetworkProvider } from "@/contexts/NetworkContext";
 
+import { RequireWallet } from "@/components/shared/RequireWallet";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
 const queryClient = new QueryClient();
@@ -21,7 +22,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/explorer" element={<Explorer />} />
+              <Route path="/explorer" element={<RequireWallet><Explorer /></RequireWallet>} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
@@ -31,5 +32,6 @@ const App = () => (
     </QueryClientProvider>
   </ErrorBoundary>
 );
+
 
 export default App;

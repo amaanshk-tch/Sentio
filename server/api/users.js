@@ -1,0 +1,148 @@
+import mysql from "mysql2/promise";
+import { broadcastUserCount } from "../ws/stream.js";
+
+const pool = mysql.createPool({
+  host:     process.env.MYSQL_HOST     || "localhost",
+  port:     parseInt(process.env.MYSQL_PORT || "3306"),
+  user:     process.env.MYSQL_USER     || "root",
+  password: process.env.MYSQL_PASSWORD || "",
+  database: process.env.MYSQL_DATABASE || "sentio_db",
+  waitForConnections: true,
+  connectionLimit:    10,
+  queueLimit:         0,
+});
+
+// Test connection on startup
+pool.getConnection()
+  .then(conn => { console.log("[users] MySQL connected"); conn.release(); })
+  .catch(err => { console.error("[users] MySQL connection failed:", err.message); process.exit(1); });
+
+const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
+const VALID_SCANNED_RE = /^[A-Z0-9]{1,12}:[A-Z2-7]{56}$|^G[A-Z2-7]{55}$|^C[A-Z2-7]{55}$/;
+
+// POST /api/users/connect
+// Called only when wallet connects — registers user, does NOT log a search
+export async function connectUserHandler(req, res) {
+  const { walletAddress, network } = req.body;
+
+  if (!walletAddress || !ACCOUNT_RE.test(walletAddress)) {
+    return res.status(400).json({ error: "Invalid wallet address." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    const now = new Date();
+    const net = network === "mainnet" ? "mainnet" : "testnet";
+
+    // Upsert user — do NOT increment scanCount here
+    await conn.execute(`
+      INSERT INTO users (walletAddress, network, connectedAt, lastSeen, scanCount)
+      VALUES (?, ?, ?, ?, 0)
+      ON DUPLICATE KEY UPDATE lastSeen = ?, network = ?
+    `, [walletAddress, net, now, now, now, net]);
+
+    const [[{ total }]] = await conn.execute(
+      "SELECT COUNT(*) as total FROM users"
+    );
+    broadcastUserCount(total); // push updated count to all WS clients
+
+    return res.json({ success: true, total });
+  } catch (err) {
+    console.error("[connectUserHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  } finally {
+    conn.release();
+  }
+}
+
+// POST /api/users/search — called after every actual search
+export async function logSearchHandler(req, res) {
+  const { walletAddress, scannedAddress, network } = req.body;
+
+  if (!walletAddress || !ACCOUNT_RE.test(walletAddress)) {
+    return res.status(400).json({ error: "Invalid wallet address." });
+  }
+
+  // Validate scannedAddress — must be a real account/asset/contract
+  if (!scannedAddress || !VALID_SCANNED_RE.test(scannedAddress)) {
+    return res.status(400).json({ error: "Invalid scanned address." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    const now = new Date();
+    const net = network === "mainnet" ? "mainnet" : "testnet";
+
+    // Insert search history row
+    await conn.execute(`
+      INSERT INTO search_history (walletAddress, scannedAddress, network, searchedAt)
+      VALUES (?, ?, ?, ?)
+    `, [walletAddress, scannedAddress, net, now]);
+
+    // Increment scanCount and update lastSeen atomically
+    await conn.execute(`
+      UPDATE users SET scanCount = scanCount + 1, lastSeen = ?
+      WHERE walletAddress = ?
+    `, [now, walletAddress]);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[logSearchHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  } finally {
+    conn.release();
+  }
+}
+
+// GET /api/users/history/:walletAddress — returns this wallet's search history
+export async function getSearchHistoryHandler(req, res) {
+  const { walletAddress } = req.params;
+
+  if (!walletAddress || !ACCOUNT_RE.test(walletAddress)) {
+    return res.status(400).json({ error: "Invalid wallet address." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.execute(
+      `SELECT scannedAddress, network, searchedAt FROM search_history
+       WHERE walletAddress = ? ORDER BY searchedAt DESC LIMIT 50`,
+      [walletAddress]
+    );
+    return res.json({ history: rows });
+  } catch (err) {
+    console.error("[getSearchHistoryHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  } finally {
+    conn.release();
+  }
+}
+
+// GET /api/users/list — admin only
+export async function listUsersHandler(req, res) {
+  const conn = await pool.getConnection();
+  try {
+    const [users] = await conn.execute(
+      "SELECT * FROM users ORDER BY connectedAt DESC"
+    );
+    return res.json({ total: users.length, users });
+  } catch (err) {
+    console.error("[listUsersHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  } finally {
+    conn.release();
+  }
+}
+
+export async function getUserCountHandler(req, res) {
+  const conn = await pool.getConnection();
+  try {
+    const [[{ total }]] = await conn.execute("SELECT COUNT(*) as total FROM users");
+    return res.json({ total });
+  } catch (err) {
+    console.error("[getUserCountHandler error]", err);
+    return res.status(500).json({ error: "Internal server error." });
+  } finally {
+    conn.release();
+  }
+}

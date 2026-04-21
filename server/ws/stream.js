@@ -8,7 +8,21 @@ const MAX_PER_IP       = 5;
 let activeConnections = 0;
 const ipConnectionCount = new Map();
 
+// Module-level wss reference for broadcasting
+let _wss = null;
+
+export function broadcastUserCount(total) {
+  if (!_wss) return;
+  const msg = JSON.stringify({ type: "user_count", total });
+  _wss.clients.forEach(client => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try { client.send(msg); } catch {}
+    }
+  });
+}
+
 export function setupWebSocket(wss) {
+  _wss = wss;
   wss.on("connection", (ws, req) => {
     if (activeConnections >= MAX_CONNECTIONS) {
       ws.close(1008, "Too many connections");

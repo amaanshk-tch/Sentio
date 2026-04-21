@@ -1,44 +1,27 @@
-// Each named bucket maintains its own per-IP window map, isolating
-// traffic across tiers so scan, registry-read, and admin-write
-// quotas are tracked independently.
-const buckets = new Map(); // bucketName -> Map<ip, { count, resetAt }>
+import { rateLimit } from "express-rate-limit";
 
-function getBucket(name) {
-  if (!buckets.has(name)) buckets.set(name, new Map());
-  return buckets.get(name);
-}
+const LIMITS = {
+  "scan":           { max: 30,  windowMs: 60_000 },
+  "registry-read":  { max: 60,  windowMs: 60_000 },
+  "admin-write":    { max: 5,   windowMs: 60_000 },
+};
 
-// Sweep expired windows across all buckets every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [, windows] of buckets) {
-    for (const [ip, win] of windows) {
-      if (now > win.resetAt) windows.delete(ip);
-    }
-  }
-}, 5 * 60 * 1000);
+const limiters = new Map();
 
-/**
- * Named rate-limit middleware.
- * @param {string} bucket   - Unique name for this tier (e.g. "scan", "registry-read", "admin-write")
- * @param {number} maxPerMinute
- */
 export function rateLimitMiddleware(bucket, maxPerMinute) {
-  return (req, res, next) => {
-    const windows = getBucket(bucket);
-    const ip  = req.ip || "unknown";
-    const now = Date.now();
-    const win = windows.get(ip);
+  if (limiters.has(bucket)) return limiters.get(bucket);
 
-    if (!win || now > win.resetAt) {
-      windows.set(ip, { count: 1, resetAt: now + 60_000 });
-      return next();
-    }
-    if (win.count >= maxPerMinute) {
-      res.set("Retry-After", Math.ceil((win.resetAt - now) / 1000));
-      return res.status(429).json({ error: "Too many requests. Please wait." });
-    }
-    win.count++;
-    next();
-  };
+  const config = LIMITS[bucket] || { max: maxPerMinute, windowMs: 60_000 };
+  const limiter = rateLimit({
+    windowMs: config.windowMs,
+    max: config.max,
+    standardHeaders: true,  // RateLimit-* headers (RFC 6585)
+    legacyHeaders: false,
+    handler: (req, res) => {
+      res.status(429).json({ error: "Too many requests. Please wait." });
+    },
+  });
+
+  limiters.set(bucket, limiter);
+  return limiter;
 }

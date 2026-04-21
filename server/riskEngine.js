@@ -1,21 +1,5 @@
-function parseStellarToml(text) {
-  const result = {};
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    const key = line.slice(0, eq).trim().toUpperCase();
-    const val = line.slice(eq + 1).trim();
-    if (val.startsWith("[")) {
-      const m = val.match(/\[([^\]]*)\]/);
-      if (m) result[key] = m[1].split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
-    } else {
-      result[key] = val.replace(/^["']|["']$/g, "");
-    }
-  }
-  return result;
-}
+import { parse as parseToml } from "smol-toml";
+import dns from "dns/promises";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -34,18 +18,55 @@ function asRatio(value, fallback = 0) {
   return clamp(asNumber(value, fallback), 0, 1);
 }
 
+async function isSafeExternalDomain(domain) {
+  // Basic structural checks
+  if (!domain.includes(".")) return false;
+  if (domain.includes("..")) return false;
+  if (/^[\d.]+$/.test(domain) || /^[0-9a-f:]+$/i.test(domain)) {
+    // It's a raw IP — apply IP checks directly
+    return isSafeIP(domain);
+  }
+
+  // Resolve and check all A/AAAA records
+  try {
+    const [ipv4, ipv6] = await Promise.all([
+      dns.resolve4(domain).catch(() => []),
+      dns.resolve6(domain).catch(() => []),
+    ]);
+    const all = [...ipv4, ...ipv6];
+    if (all.length === 0) return false;
+    return all.every(isSafeIP);
+  } catch {
+    return false;
+  }
+}
+
+function isSafeIP(ip) {
+  const PRIVATE = [
+    /^127\./,
+    /^10\./,
+    /^192\.168\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^169\.254\./,         // link-local / cloud metadata
+    /^0\./,                // 0.0.0.0/8
+    /^::1$/,               // IPv6 loopback
+    /^::ffff:127\./,       // IPv4-mapped loopback
+    /^::ffff:10\./,        // IPv4-mapped private
+    /^::ffff:192\.168\./,  // IPv4-mapped private
+    /^fe80:/i,             // IPv6 link-local
+    /^fc00:/i,             // IPv6 unique local
+    /^fd/i,                // IPv6 unique local
+  ];
+  return !PRIVATE.some(r => r.test(ip));
+}
+
 export async function verifyHomeDomain(homeDomain, accountId) {
   if (!homeDomain) return { homeDomain: null, verified: false, tomlFields: {} };
   const domain = String(homeDomain).trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  if (!domain || domain.includes(" ") || domain.includes("@"))
+  if (!domain || domain.includes(" ") || domain.includes("@")) {
     return { homeDomain: domain || null, verified: false, tomlFields: {} };
-
-  function isSafeExternalDomain(d) {
-    const forbidden = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/;
-    return !forbidden.test(d) && !d.includes("..") && d.includes(".");
   }
-
-  if (!isSafeExternalDomain(domain)) {
+  if (!await isSafeExternalDomain(domain)) {
     return { homeDomain: domain, verified: false, tomlFields: {} };
   }
 
@@ -57,13 +78,24 @@ export async function verifyHomeDomain(homeDomain, accountId) {
     clearTimeout(t);
     if (!res.ok) return { homeDomain: domain, verified: false, tomlFields: {} };
     const text = await res.text();
-    const tomlFields = parseStellarToml(text);
-    const hasPassphrase = Boolean(tomlFields.NETWORK_PASSPHRASE);
-    const hasSigningKey  = Boolean(tomlFields.SIGNING_KEY);
-    const accounts       = Array.isArray(tomlFields.ACCOUNTS) ? tomlFields.ACCOUNTS : [];
-    const accountListed  = accountId ? accounts.includes(accountId) : false;
+
+    let toml;
+    try {
+      toml = parseToml(text);
+    } catch {
+      return { homeDomain: domain, verified: false, tomlFields: {} };
+    }
+
+    const hasPassphrase  = Boolean(toml.NETWORK_PASSPHRASE);
+    const hasSigningKey  = Boolean(toml.SIGNING_KEY);
+    // TOML [[ACCOUNTS]] parses as array of objects; flat ACCOUNTS = array of strings
+    const accounts = Array.isArray(toml.ACCOUNTS)
+      ? toml.ACCOUNTS.flatMap(a => typeof a === "string" ? [a] : (a.PUBLIC_KEY ? [a.PUBLIC_KEY] : []))
+      : [];
+    const accountListed = accountId ? accounts.includes(accountId) : false;
     const verified = hasPassphrase || hasSigningKey || accounts.length > 0;
-    return { homeDomain: domain, verified, tomlFields, accountListed };
+
+    return { homeDomain: domain, verified, tomlFields: toml, accountListed };
   } catch {
     return { homeDomain: domain, verified: false, tomlFields: {} };
   }

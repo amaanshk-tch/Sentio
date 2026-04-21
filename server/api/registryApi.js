@@ -1,7 +1,6 @@
 import { 
   getOnchainHistory, 
   getOnchainFlags, 
-  setOnchainRisk,
   buildFlagTransaction,
   buildSetRiskTransaction,
   submitSignedTransaction,
