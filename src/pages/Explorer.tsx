@@ -1519,7 +1519,9 @@ export default function Explorer() {
       try {
         const msg = JSON.parse(e.data as string);
         if (msg.type === "user_count" && typeof msg.total === "number") setUserCount(msg.total);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     };
     return () => ws.close();
   }, []);
@@ -1679,7 +1681,7 @@ async function logSearch(walletKey: string, scannedAddress: string, network: str
         message: err instanceof Error ? err.message : "Unknown error",
       });
     }
-  }, [setSearchParams, network]);
+  }, [setSearchParams, network, freighter.isConnected, freighter.publicKey]);
 
 
 

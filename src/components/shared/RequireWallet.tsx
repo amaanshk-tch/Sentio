@@ -17,7 +17,9 @@ export function RequireWallet({ children }: { children: React.ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress: key, network }),
         });
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     }
   }
 

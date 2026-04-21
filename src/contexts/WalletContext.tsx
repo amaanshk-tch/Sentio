@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, ReactNode } from "react";
 import { useFreighter } from "@/hooks/useFreighter";
 import type { FreighterStatus } from "@/hooks/useFreighter";
