@@ -1681,11 +1681,7 @@ async function logSearch(walletKey: string, scannedAddress: string, network: str
     }
   }, [setSearchParams, network]);
 
-  useEffect(() => {
-    const q = searchParams.get("q");
-    if (q) handleSearch(q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   useEffect(() => {
     const q = lastQueryRef.current;
@@ -1823,6 +1819,16 @@ async function logSearch(walletKey: string, scannedAddress: string, network: str
             )}
           </button>
         </form>
+        {state.status === "idle" && query.trim() !== "" && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-3 text-center text-[0.7rem] font-bold uppercase tracking-[0.15em] text-primary/80 animate-pulse"
+          >
+            Press Enter or click Search to scan
+          </motion.p>
+        )}
+
         {state.status === "idle" && (
           <div className="mt-8 space-y-12">
             <div>
