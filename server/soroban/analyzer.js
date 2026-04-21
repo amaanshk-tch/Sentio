@@ -1,5 +1,6 @@
 import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
 import { HORIZON_URL, HORIZON_MAINNET_URL, SOROBAN_RPC_URL, SOROBAN_RPC_MAINNET_URL } from "../config.js";
+import { verifyHomeDomain } from "../riskEngine.js";
 
 async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });
@@ -53,12 +54,20 @@ async function analyzeDeployer(deployerAccount, { signal, network = "testnet" } 
   try {
     const acc = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}`, { signal });
     const homeDomain = acc?.home_domain || null;
-    const deployerDomainVerified = Boolean(homeDomain);
 
-    const txRes = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}/transactions?order=asc&limit=1`, { signal });
+    // Use the real TOML verification, not just presence check
+    const domainInfo = await verifyHomeDomain(homeDomain, deployerAccount);
+    const deployerDomainVerified = domainInfo.verified;
+
+    const txRes = await fetchJson(
+      `${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}/transactions?order=asc&limit=1`,
+      { signal }
+    );
     const oldest = txRes?._embedded?.records?.[0];
     const oldestAt = oldest?.created_at ? Date.parse(oldest.created_at) : NaN;
-    const deployerAgeDays = Number.isFinite(oldestAt) ? Math.max(0, Math.floor((Date.now() - oldestAt) / 86_400_000)) : null;
+    const deployerAgeDays = Number.isFinite(oldestAt)
+      ? Math.max(0, Math.floor((Date.now() - oldestAt) / 86_400_000))
+      : null;
 
     return { deployerAccount, deployerDomainVerified, deployerAgeDays, homeDomain };
   } catch {
