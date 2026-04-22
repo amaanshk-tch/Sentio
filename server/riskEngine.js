@@ -217,7 +217,7 @@ function getRiskColor(level) {
   return "rose";
 }
 
-export function calculateWalletRisk(rawInput) {
+function calculateWalletRisk(rawInput) {
   const data = normalizeWalletRiskInput(rawInput);
   const contributions = [];
   const add = (key, label, points, meta = {}) => {

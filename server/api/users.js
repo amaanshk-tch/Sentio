@@ -108,29 +108,6 @@ export async function getSearchHistoryHandler(req, res) {
   }
 }
 
-// GET /api/users/list — admin only
-export async function listUsersHandler(req, res) {
-  const page  = Math.max(1, parseInt(req.query.page  || "1",  10));
-  const limit = Math.min(200, parseInt(req.query.limit || "50", 10));
-  const offset = (page - 1) * limit;
-
-  const conn = await pool.getConnection();
-  try {
-    const [[{ total }]] = await conn.execute("SELECT COUNT(*) as total FROM users");
-    const [users] = await conn.execute(
-      `SELECT walletAddress, network, connectedAt, lastSeen, scanCount
-       FROM users ORDER BY connectedAt DESC LIMIT ? OFFSET ?`,
-      [limit, offset]
-    );
-    return res.json({ total, page, limit, users });
-  } catch (err) {
-    console.error("[listUsersHandler error]", err);
-    return res.status(500).json({ error: "Internal server error." });
-  } finally {
-    conn.release();
-  }
-}
-
 export async function getUserCountHandler(req, res) {
   const conn = await pool.getConnection();
   try {

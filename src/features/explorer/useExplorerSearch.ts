@@ -177,6 +177,7 @@ export function useExplorerSearch(
     setState({ status: "idle" });
     setQuery("");
     lastQueryRef.current = null;
+    searchedNetworkRef.current = network;
     setSearchParams({}, { replace: true });
   };
 

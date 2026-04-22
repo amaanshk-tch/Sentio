@@ -11,7 +11,7 @@ export interface OnchainFlag {
   timestamp: number;
 }
 
-export interface ScanContribution {
+interface ScanContribution {
   key?: string;
   label: string;
   impact: number;

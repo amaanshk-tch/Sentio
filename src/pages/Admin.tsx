@@ -3,7 +3,7 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ShieldAlert, Flag, Lock, Wallet, CheckCircle, AlertCircle, Copy, Eraser, Trash2 } from "lucide-react";
-import { isConnected, getAddress, setAllowed, signTransaction } from "@stellar/freighter-api";
+import { isConnected, getAddress, requestAccess, signTransaction } from "@stellar/freighter-api";
 import { toast } from "sonner";
 import { useNetwork } from "@/contexts/NetworkContext";
 
@@ -80,7 +80,7 @@ export default function Admin() {
         window.open("https://www.freighter.app/", "_blank");
         return;
       }
-      await setAllowed();
+      await requestAccess();
       const data = await getAddress();
       if (!data?.address) { toast.error("Could not get wallet address."); return; }
 

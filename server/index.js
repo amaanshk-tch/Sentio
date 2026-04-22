@@ -9,7 +9,7 @@ import { requireAdminToken } from "./utils/auth.js";
 import { scanHandler } from "./api/scan.js";
 import { contractScanHandler } from "./api/contract.js";
 import { historyHandler, flagsHandler, reportHandler, setRiskHandler, clearFlagsHandler, removeRiskHandler, submitHandler } from "./api/registryApi.js";
-import { connectUserHandler, logSearchHandler, getSearchHistoryHandler, listUsersHandler, getUserCountHandler } from "./api/users.js";
+import { connectUserHandler, logSearchHandler, getSearchHistoryHandler, getUserCountHandler } from "./api/users.js";
 import { setupWebSocket } from "./ws/stream.js";
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN
@@ -77,7 +77,6 @@ app.post("/api/scan/contract", rateLimitMiddleware("scan", 30), contractScanHand
 app.post("/api/users/connect",              rateLimitMiddleware("registry-read", 60), connectUserHandler);
 app.post("/api/users/search",               rateLimitMiddleware("registry-read", 60), logSearchHandler);
 app.get("/api/users/history/:walletAddress", rateLimitMiddleware("registry-read", 60), getSearchHistoryHandler);
-app.get("/api/users/list",                  requireAdminToken, listUsersHandler);
 app.get("/api/users/count",                 rateLimitMiddleware("registry-read", 60), getUserCountHandler);
 
 app.get("/api/registry/history/:address", rateLimitMiddleware("registry-read", 60), historyHandler);
