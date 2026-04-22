@@ -1,3 +1,4 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger } from "@/lib/stellar";
@@ -59,7 +60,7 @@ export function useExplorerSearch(
     try {
       setScanStep("Fetching account data...");
       if (isContract) {
-        const res = await fetch("/api/scan/contract", {
+        const res = await fetch(`${API_BASE}/api/scan/contract`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contractId: trimmed, network: activeNetwork }),
@@ -108,7 +109,7 @@ export function useExplorerSearch(
       if (addressToFetch) {
         try {
           setScanStep("Analyzing transactions...");
-          const scanReq = await fetch("/api/scan", {
+          const scanReq = await fetch(`${API_BASE}/api/scan`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query: trimmed, network: activeNetwork }),
@@ -124,8 +125,8 @@ export function useExplorerSearch(
 
           setScanStep("Checking on-chain registry...");
           const [histRes, flagsRes, scanRes, ledgerRes] = await Promise.all([
-            fetch(`/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
-            fetch(`/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] }),
+            fetch(`${API_BASE}/api/registry/history/${addressToFetch}`).then(r => r.ok ? r.json() : { history: [] }),
+            fetch(`${API_BASE}/api/registry/flags/${addressToFetch}`).then(r => r.ok ? r.json() : { flags: [] }),
             scanResPromise,
             fetchLatestLedger(activeNetwork),
           ]);

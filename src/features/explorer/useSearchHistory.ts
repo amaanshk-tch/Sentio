@@ -1,3 +1,4 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 import { useState, useEffect, useCallback } from "react";
 
 export interface SearchHistoryItem {
@@ -11,7 +12,7 @@ export function useSearchHistory(isConnected: boolean, publicKey: string | null)
 
   useEffect(() => {
     if (isConnected && publicKey) {
-      fetch(`/api/users/history/${publicKey}`)
+      fetch(`${API_BASE}/api/users/history/${publicKey}`)
         .then(r => r.ok ? r.json() : { history: [] })
         .then(data => setRawHistory(data.history || []))
         .catch(() => {});
@@ -22,7 +23,7 @@ export function useSearchHistory(isConnected: boolean, publicKey: string | null)
 
   const logSearch = useCallback(async (walletKey: string, scannedAddress: string, network: string) => {
     try {
-      await fetch("/api/users/search", {
+      await fetch(`${API_BASE}/api/users/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: walletKey, scannedAddress, network }),
@@ -34,7 +35,7 @@ export function useSearchHistory(isConnected: boolean, publicKey: string | null)
 
   const registerWallet = useCallback(async (walletKey: string, network: string) => {
     try {
-      await fetch("/api/users/connect", {
+      await fetch(`${API_BASE}/api/users/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: walletKey, network }),

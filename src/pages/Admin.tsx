@@ -1,3 +1,4 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { BrandMark } from "@/components/landing/BrandMark";
@@ -54,7 +55,7 @@ export default function Admin() {
     if (!token.trim()) return;
     setIsUnlocking(true);
     try {
-      const res = await fetch("/api/registry/verify-token", {
+      const res = await fetch(`${API_BASE}/api/registry/verify-token`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -86,7 +87,7 @@ export default function Admin() {
 
       setWalletAddress(data.address);
 
-      const res = await fetch("/api/registry/verify-admin", {
+      const res = await fetch(`${API_BASE}/api/registry/verify-admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ signerAddress: data.address }),
@@ -115,7 +116,7 @@ export default function Admin() {
       const result = await signTransaction(unsignedXdr, { networkPassphrase });
       if (!result?.signedTxXdr) throw new Error("Freighter did not return a signed transaction.");
 
-      const submitRes = await fetch("/api/registry/submit", {
+      const submitRes = await fetch(`${API_BASE}/api/registry/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ signedXdr: result.signedTxXdr }),
@@ -140,7 +141,7 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsSettingRisk(true);
     try {
-      const res = await fetch("/api/registry/set-risk", {
+      const res = await fetch(`${API_BASE}/api/registry/set-risk`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({
@@ -179,7 +180,7 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsFlagging(true);
     try {
-      const res = await fetch("/api/registry/report", {
+      const res = await fetch(`${API_BASE}/api/registry/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({
@@ -215,7 +216,7 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsClearing(true);
     try {
-      const res = await fetch("/api/registry/clear-flags", {
+      const res = await fetch(`${API_BASE}/api/registry/clear-flags`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ address: clearAddress, signerAddress: walletAddress }),
@@ -244,7 +245,7 @@ export default function Admin() {
     if (!walletVerified) { toast.error("Connect and verify your wallet first."); return; }
     setIsRemoving(true);
     try {
-      const res = await fetch("/api/registry/remove-risk", {
+      const res = await fetch(`${API_BASE}/api/registry/remove-risk`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tokenRef.current}` },
         body: JSON.stringify({ address: removeAddress, signerAddress: walletAddress }),

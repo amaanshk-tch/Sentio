@@ -35,7 +35,8 @@ export function useLiveStream(
     if (!accountId) return () => { mounted = false; };
 
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    const backendWs = import.meta.env.VITE_API_WS_URL || `${protocol}://${window.location.host}`;
+    const ws = new WebSocket(`${backendWs}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
