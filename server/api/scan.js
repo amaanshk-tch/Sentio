@@ -20,7 +20,7 @@ import { getOnchainRisk, getOnchainHistory, getOnchainFlags } from "../soroban/r
 const ONCHAIN_WRITE_COOLDOWN_MS = 10 * 60 * 1000;
 const onchainWriteTimestamps = new Map();
 
-// ─── Helper: onchain write throttle ─────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────
 
 function shouldWriteOnchain(address) {
   const now = Date.now();
@@ -30,8 +30,6 @@ function shouldWriteOnchain(address) {
   return true;
 }
 
-// ─── Helper: throw 404 if account missing on selected network ────────────────
-
 function assertAccountExists(account, network) {
   if (account) return;
   const label = network === "mainnet" ? "Mainnet" : "Testnet";
@@ -40,7 +38,6 @@ function assertAccountExists(account, network) {
   throw err;
 }
 
-// ─── Helper: extract asset supply from Horizon response ─────────────────────
 
 function extractAssetSupply(assetsResponse) {
   const record = assetsResponse?._embedded?.records?.[0];
@@ -48,8 +45,6 @@ function extractAssetSupply(assetsResponse) {
   const p = Number(record.amount);
   return Number.isFinite(p) ? p : null;
 }
-
-// ─── Helper: extract account flags ──────────────────────────────────────────
 
 function extractAccountFlags(account, isAsset) {
   const accFlags = account?.flags || {};
@@ -61,8 +56,6 @@ function extractAccountFlags(account, isAsset) {
   return flags;
 }
 
-// ─── Helper: count recent transactions (30-day window) ───────────────────────
-
 function countRecentTx(records) {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
   return records.filter((t) => {
@@ -71,7 +64,6 @@ function countRecentTx(records) {
   }).length;
 }
 
-// ─── Helper: derive account age in days ──────────────────────────────────────
 
 function deriveAgeDays(txOldest) {
   const oldest = txOldest?._embedded?.records?.[0];
@@ -80,7 +72,6 @@ function deriveAgeDays(txOldest) {
   return Math.max(0, Math.floor((Date.now() - oldestAt) / 86_400_000));
 }
 
-// ─── Helper: analyse counterparties from operations ──────────────────────────
 
 async function analyseCounterparties(opsPayload, accountId, horizonUrl, signal) {
   if (!opsPayload) return { counterparties: null, operationBreakdown: {} };
@@ -106,13 +97,12 @@ async function analyseCounterparties(opsPayload, accountId, horizonUrl, signal) 
     try {
       const acc = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(id)}`, { signal });
       if (acc?.home_domain) knownVerified++;
-    } catch { /* unreachable counterparty — skip */ }
+    } catch {}
   }));
 
   return { counterparties: { total, unique, knownVerified }, operationBreakdown };
 }
 
-// ─── Helper: analyse DEX exposure from open offers ───────────────────────────
 
 function analyseDexExposure(offersPayload) {
   if (!offersPayload) return null;
@@ -125,15 +115,11 @@ function analyseDexExposure(offersPayload) {
   return { openOffers: offers.length, offerAssets: [...offerAssets] };
 }
 
-// ─── Helper: count claimable balances ────────────────────────────────────────
-
 function analyseClaimableBalances(claimablePayload) {
   if (!claimablePayload) return null;
   const claims = Array.isArray(claimablePayload?._embedded?.records) ? claimablePayload._embedded.records : [];
   return { count: claims.length };
 }
-
-// ─── Helper: compute token concentration ─────────────────────────────────────
 
 function computeTokenConcentration(balances) {
   const nonNative = balances.filter((b) => b?.asset_type && b.asset_type !== "native");
@@ -145,7 +131,6 @@ function computeTokenConcentration(balances) {
   return total > 0 ? top / total : 0;
 }
 
-// ─── Helper: resolve suspicious interaction counts from tx pattern ────────────
 
 function resolveSuspiciousInteractions(txPattern, velocity) {
   let contractInteractions = 0;
@@ -156,8 +141,6 @@ function resolveSuspiciousInteractions(txPattern, velocity) {
   return { contractInteractions, flaggedTx };
 }
 
-// ─── Helper: resolve suspicous time signals ───────────────────────────────────
-
 function resolveTimeSuspicion(txPattern, velocity, txRecentCount) {
   const recentSuspiciousTx = txPattern === "normal" ? 0 : Math.max(0, Math.min(1, velocity / 40));
   const oldSuspiciousTx = txPattern === "normal"
@@ -166,7 +149,7 @@ function resolveTimeSuspicion(txPattern, velocity, txRecentCount) {
   return { recentSuspiciousTx, oldSuspiciousTx };
 }
 
-// ─── Helper: build walletData shape ──────────────────────────────────────────
+
 
 function buildWalletData({
   ageDays, txRecentCount, velocity, txPattern,
@@ -203,7 +186,6 @@ function buildWalletData({
   };
 }
 
-// ─── Helper: build age breakdown entry ───────────────────────────────────────
 
 function buildAgeEntry(ageDays) {
   const value  = ageDays == null ? "Unknown" : `${ageDays} days`;
@@ -213,13 +195,12 @@ function buildAgeEntry(ageDays) {
   if (ageDays != null) {
     if (ageDays < 14)   { status = "New";         tone = "rose";    }
     else if (ageDays < 90)  { status = "Growing"; tone = "amber";   }
-    else if (ageDays < 365) { status = "Maturing"; tone = "sky";    } // ADD this tier
-    else                { status = "Established";  tone = "emerald"; } // Requires 1 year
+    else if (ageDays < 365) { status = "Maturing"; tone = "sky";    }
+    else                { status = "Established";  tone = "emerald"; }
   }
   return { key: "age", title: "Account Age", value, status, tone, flag };
 }
 
-// ─── Helper: build tx breakdown entry ────────────────────────────────────────
 
 function buildTxEntry(txRecentCount, txPattern) {
   const value = txRecentCount?.toLocaleString() ?? "Unknown";
@@ -234,7 +215,6 @@ function buildTxEntry(txRecentCount, txPattern) {
   return { key: "tx", title: "Transactions (30d)", value, status, tone, flag };
 }
 
-// ─── Helper: build trustlines breakdown entry ─────────────────────────────────
 
 function buildTrustlinesEntry(trustlinesCount, trustlineQuality, trustlineFlags) {
   const value = trustlinesCount == null ? "Unknown" : String(trustlinesCount);
@@ -249,7 +229,6 @@ function buildTrustlinesEntry(trustlinesCount, trustlineQuality, trustlineFlags)
   return { key: "trustlines", title: "Trustlines", value, status, tone, flag };
 }
 
-// ─── Helper: build domain breakdown entry ────────────────────────────────────
 
 function buildDomainEntry(normalizedDomain, domainVerified, accountListed) {
   const value  = normalizedDomain || "—";
@@ -260,7 +239,6 @@ function buildDomainEntry(normalizedDomain, domainVerified, accountListed) {
   return { key: "domain", title: "Domain Status", value, status, tone, flag };
 }
 
-// ─── Helper: build supply breakdown entry ────────────────────────────────────
 
 function buildSupplyEntry(isAsset, assetSupply) {
   if (!isAsset) return { key: "supply", title: "Asset Supply", value: "—", status: "N/A", tone: "slate", flag: null };
@@ -275,7 +253,6 @@ function buildSupplyEntry(isAsset, assetSupply) {
   return { key: "supply", title: "Asset Supply", value, status, tone, flag };
 }
 
-// ─── Helper: build flags breakdown entry ─────────────────────────────────────
 
 function buildFlagsEntry(flags) {
   const status = flags.length ? "Present" : "None";
@@ -286,7 +263,6 @@ function buildFlagsEntry(flags) {
   return { key: "flags", title: "Flags", value: String(flags.length), status, tone, flag };
 }
 
-// ─── Helper: build full breakdown array ──────────────────────────────────────
 
 function buildBreakdown({ ageDays, txRecentCount, txPattern, trustlinesCount, trustlineQuality, trustlineFlags, normalizedDomain, domainVerified, accountListed, isAsset, assetSupply, flags }) {
   return [
@@ -299,14 +275,9 @@ function buildBreakdown({ ageDays, txRecentCount, txPattern, trustlinesCount, tr
   ];
 }
 
-// ─── Helper: fire-and-forget onchain risk write ──────────────────────────────
 
-function maybeWriteOnchain() {
-  // Removed: on-chain auto-write required admin private key on server.
-  // All on-chain writes go through admin panel → Freighter signing.
-}
+function maybeWriteOnchain() {}
 
-// ─── Helper: fetch all Horizon data in parallel ───────────────────────────────
 
 async function fetchHorizonData(horizonUrl, accountId, isAsset, asset, signal) {
   let assetPromise = Promise.resolve(null);
@@ -362,14 +333,10 @@ async function fetchHorizonData(horizonUrl, accountId, isAsset, asset, signal) {
   return { assetsResponse, account, domainInfo, txRecent, txOldest, opsPayload, offersPayload, claimablePayload, onchainData, onchainHistory, onchainFlags };
 }
 
-// ─── Helper: resolve cache key ───────────────────────────────────────────────
-
 function buildCacheKey(network, isAsset, asset, query) {
   if (isAsset) return `${network}:asset:${asset.code}:${asset.issuer}`;
   return `${network}:account:${query}`;
 }
-
-// ─── Main scan function ───────────────────────────────────────────────────────
 
 export async function runScan(query, { signal, prevScore = null, network = "testnet" } = {}) {
   const horizonUrl = getHorizonUrl(network);
@@ -444,7 +411,6 @@ export async function runScan(query, { signal, prevScore = null, network = "test
   };
 }
 
-// ─── HTTP handler ─────────────────────────────────────────────────────────────
 
 export async function scanHandler(req, res) {
   try {

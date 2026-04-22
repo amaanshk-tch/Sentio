@@ -15,13 +15,11 @@ interface FreighterState {
 
 export function useFreighter() {
   const [state, setState] = useState<FreighterState>({
-    status: "idle",  // Start idle — do NOT auto-reconnect on mount
+    status: "idle",
     publicKey: null,
     error: null,
   });
 
-  // On mount, silently check if the user's wallet is already connected/authorized.
-  // This restores the session after a page refresh so history loads automatically.
   useEffect(() => {
     let cancelled = false;
     async function restoreSession() {
@@ -33,14 +31,13 @@ export function useFreighter() {
           setState({ status: "connected", publicKey: result.address, error: null });
         }
       } catch {
-        // Silently ignore — user will connect manually
+        // Silently ignore session restoration failures
       }
     }
     restoreSession();
     return () => { cancelled = true; };
   }, []);
 
-  // Disconnect on page unload (refresh, tab close, navigation away)
   useEffect(() => {
     function handleUnload() {
       setState({ status: "idle", publicKey: null, error: null });

@@ -12,7 +12,6 @@ import { historyHandler, flagsHandler, reportHandler, setRiskHandler, clearFlags
 import { connectUserHandler, logSearchHandler, getSearchHistoryHandler, listUsersHandler, getUserCountHandler } from "./api/users.js";
 import { setupWebSocket } from "./ws/stream.js";
 
-/* ─── CORS / Origin config (must be declared before WebSocketServer) ────────── */
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN
   ? process.env.ALLOWED_ORIGIN.split(",")
   : ["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"];
@@ -40,7 +39,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],       // add "'unsafe-inline'" only if Vite build requires it
+      scriptSrc: ["'self'"],
       styleSrc:  ["'self'", "'unsafe-inline'"],
       imgSrc:    ["'self'", "data:", "https:"],
       connectSrc: [
@@ -50,14 +49,14 @@ app.use(helmet({
         "https://soroban-testnet.stellar.org",
         "https://soroban-rpc.mainnet.stellar.gateway.fm",
         "https://api.stellar.expert",
-        "wss:", // for WebSocket
+        "wss:",
       ],
       fontSrc:   ["'self'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
     },
   },
-  crossOriginEmbedderPolicy: false, // may need to disable for Freighter extension
+  crossOriginEmbedderPolicy: false,
 }));
 
 app.use(cors({

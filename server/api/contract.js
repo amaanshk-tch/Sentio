@@ -41,7 +41,7 @@ export async function contractScanHandler(req, res) {
         metadata: {
           ageDays: data.ageDays,
           contractType: data.contractType,
-          deployer: data.deployer?.deployerAccount ?? null, // string or null
+          deployer: data.deployer?.deployerAccount ?? null,
         },
         behavior: {
           invocationCount: data.invocationCount,
@@ -53,11 +53,9 @@ export async function contractScanHandler(req, res) {
         events: {
           categories: data.eventCategories,
           raw: (data.rawEvents || []).map(e => ({
-            // Whitelist only the fields you actually display in the UI
             ledger: typeof e.ledger === "number" ? e.ledger : null,
             txHash: typeof e.txHash === "string" ? e.txHash.slice(0, 64) : null,
             type:   typeof e.type   === "string" ? e.type.slice(0, 32) : null,
-            // Do NOT forward e.value, e.topic raw objects — convert to strings first
             topic:  Array.isArray(e.topic) ? e.topic.map(t => String(t).slice(0, 64)) : [],
           }))
         },

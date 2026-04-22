@@ -8,7 +8,6 @@ const MAX_PER_IP       = 5;
 let activeConnections = 0;
 const ipConnectionCount = new Map();
 
-// Module-level wss reference for broadcasting
 let _wss = null;
 let broadcastTimer = null;
 let pendingCount = null;
@@ -16,14 +15,14 @@ let pendingCount = null;
 export function broadcastUserCount(total) {
   if (!_wss) return;
   pendingCount = total;
-  if (broadcastTimer) return; // debounce: only send once per 2 seconds
+  if (broadcastTimer) return;
   broadcastTimer = setTimeout(() => {
     broadcastTimer = null;
     if (pendingCount === null) return;
     const msg = JSON.stringify({ type: "user_count", total: pendingCount });
     pendingCount = null;
     _wss.clients.forEach(client => {
-      if (client.readyState === 1) { // WebSocket.OPEN
+      if (client.readyState === 1) {
         try { client.send(msg); } catch {}
       }
     });
@@ -56,7 +55,7 @@ export function setupWebSocket(wss) {
     let streamController = null;
     let killTimer        = null;
     let lastScore        = null;
-    let activeNetwork    = "testnet"; // tracks network for this connection
+    let activeNetwork    = "testnet";
 
     function cleanup() {
       if (killTimer)        { clearTimeout(killTimer); killTimer = null; }
@@ -152,7 +151,7 @@ export function setupWebSocket(wss) {
           if (isAccount(id)) {
             if (net !== activeNetwork) {
               activeNetwork = net;
-              lastScore = null; // reset score baseline when network changes
+              lastScore = null;
             }
             startStream(id);
           }
@@ -164,7 +163,7 @@ export function setupWebSocket(wss) {
 
     let released = false;
     function releaseConnection() {
-      if (released) return; // guard against double-call
+      if (released) return;
       released = true;
       cleanup();
       activeConnections = Math.max(0, activeConnections - 1);

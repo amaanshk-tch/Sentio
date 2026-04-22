@@ -9,7 +9,6 @@ export interface SearchHistoryItem {
 export function useSearchHistory(isConnected: boolean, publicKey: string | null) {
   const [rawHistory, setRawHistory] = useState<SearchHistoryItem[]>([]);
 
-  // Fetch history when wallet connects
   useEffect(() => {
     if (isConnected && publicKey) {
       fetch(`/api/users/history/${publicKey}`)
@@ -29,7 +28,7 @@ export function useSearchHistory(isConnected: boolean, publicKey: string | null)
         body: JSON.stringify({ walletAddress: walletKey, scannedAddress, network }),
       });
     } catch {
-      // Non-critical
+      // Non-critical: failure to log search history doesn't break the scan
     }
   }, []);
 
@@ -41,7 +40,7 @@ export function useSearchHistory(isConnected: boolean, publicKey: string | null)
         body: JSON.stringify({ walletAddress: walletKey, network }),
       });
     } catch {
-      // Non-critical
+      // Non-critical: failure to register wallet doesn't break the experience
     }
   }, []);
 

@@ -12,7 +12,6 @@ const pool = mysql.createPool({
   queueLimit:         0,
 });
 
-// Test connection on startup
 pool.getConnection()
   .then(conn => { console.log("[users] MySQL connected"); conn.release(); })
   .catch(err => { console.error("[users] MySQL connection failed:", err.message); process.exit(1); });
@@ -20,8 +19,6 @@ pool.getConnection()
 const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
 const VALID_SCANNED_RE = /^[A-Z0-9]{1,12}:[A-Z2-7]{56}$|^G[A-Z2-7]{55}$|^C[A-Z2-7]{55}$/;
 
-// POST /api/users/connect
-// Called only when wallet connects — registers user, does NOT log a search
 export async function connectUserHandler(req, res) {
   const { walletAddress, network } = req.body;
 
@@ -34,7 +31,6 @@ export async function connectUserHandler(req, res) {
     const now = new Date();
     const net = network === "mainnet" ? "mainnet" : "testnet";
 
-    // Upsert user — do NOT increment scanCount here
     await conn.execute(`
       INSERT INTO users (walletAddress, network, connectedAt, lastSeen, scanCount)
       VALUES (?, ?, ?, ?, 0)
@@ -44,7 +40,7 @@ export async function connectUserHandler(req, res) {
     const [[{ total }]] = await conn.execute(
       "SELECT COUNT(*) as total FROM users"
     );
-    broadcastUserCount(total); // push updated count to all WS clients
+    broadcastUserCount(total);
 
     return res.json({ success: true, total });
   } catch (err) {
@@ -55,7 +51,6 @@ export async function connectUserHandler(req, res) {
   }
 }
 
-// POST /api/users/search — called after every actual search
 export async function logSearchHandler(req, res) {
   const { walletAddress, scannedAddress, network } = req.body;
 
@@ -63,7 +58,6 @@ export async function logSearchHandler(req, res) {
     return res.status(400).json({ error: "Invalid wallet address." });
   }
 
-  // Validate scannedAddress — must be a real account/asset/contract
   if (!scannedAddress || !VALID_SCANNED_RE.test(scannedAddress)) {
     return res.status(400).json({ error: "Invalid scanned address." });
   }
@@ -73,13 +67,10 @@ export async function logSearchHandler(req, res) {
     const now = new Date();
     const net = network === "mainnet" ? "mainnet" : "testnet";
 
-    // Insert search history row
     await conn.execute(`
       INSERT INTO search_history (walletAddress, scannedAddress, network, searchedAt)
       VALUES (?, ?, ?, ?)
     `, [walletAddress, scannedAddress, net, now]);
-
-    // Increment scanCount and update lastSeen atomically
     await conn.execute(`
       UPDATE users SET scanCount = scanCount + 1, lastSeen = ?
       WHERE walletAddress = ?
@@ -94,7 +85,6 @@ export async function logSearchHandler(req, res) {
   }
 }
 
-// GET /api/users/history/:walletAddress — returns this wallet's search history
 export async function getSearchHistoryHandler(req, res) {
   const { walletAddress } = req.params;
 

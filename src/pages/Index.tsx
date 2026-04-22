@@ -10,7 +10,6 @@ export default function Index() {
 
   function handleReveal() {
     setShown(true);
-    // scroll after the element has mounted on the next frame
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
         document

@@ -2,9 +2,7 @@ import { getLatestLedger, getTransactions, getEvents } from "./rpc.js";
 import { HORIZON_URL, HORIZON_MAINNET_URL, SOROBAN_RPC_URL, SOROBAN_RPC_MAINNET_URL } from "../config.js";
 import { verifyHomeDomain } from "../riskEngine.js";
 
-// Stellar's target ledger close time. Mainnet and Testnet both target ~5 seconds.
-// If Stellar changes this, update here.
-const LEDGERS_PER_DAY = 5 * 60 * 24; // 17,280 ledgers/day at 5s close time
+const LEDGERS_PER_DAY = 5 * 60 * 24;
 
 async function fetchJson(url, { signal } = {}) {
   const res = await fetch(url, { signal, headers: { accept: "application/json" } });
@@ -58,8 +56,6 @@ async function analyzeDeployer(deployerAccount, { signal, network = "testnet" } 
   try {
     const acc = await fetchJson(`${horizonUrl}/accounts/${encodeURIComponent(deployerAccount)}`, { signal });
     const homeDomain = acc?.home_domain || null;
-
-    // Use the real TOML verification, not just presence check
     const domainInfo = await verifyHomeDomain(homeDomain, deployerAccount);
     const deployerDomainVerified = domainInfo.verified;
 
@@ -88,29 +84,20 @@ export async function analyzeContract(contractId, { signal, network = "testnet" 
   const currentLedger = latestLedger?.sequence ?? 0;
   const startLedger   = Math.max(1, currentLedger - 720);
 
-  console.log("[analyzer] contractId:", contractId, "startLedger:", startLedger);
-
   const expertData = await fetch(
     `https://api.stellar.expert/explorer/${expertNet}/contract/${contractId}`,
     { signal, headers: { accept: "application/json" } }
   ).then(r => r.ok ? r.json() : null).catch(() => null);
-
-  if (process.env.LOG_LEVEL === "debug") {
-    console.log("[analyzer] expertData:", JSON.stringify(expertData));
-  }
 
   const label = isMainnet ? "Mainnet" : "Testnet";
 
   const [transactions, events] = await Promise.all([
     getTransactions(startLedger, { signal, limit: 200, rpcUrl }),
     getEvents(startLedger, contractId, { signal, limit: 100, rpcUrl }).catch((e) => {
-      console.warn("[analyzer] getEvents failed:", e.message);
       return [];
     }),
   ]);
 
-  // Hard segregation: if we have no expert data AND no on-chain events for this
-  // network, the contract does not exist here. Throw so the handler returns 404.
   if (!expertData && events.length === 0) {
     const err = new Error(`Contract not found on ${label}. Make sure you are on the correct network.`);
     err.status = 404;

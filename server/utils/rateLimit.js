@@ -15,7 +15,7 @@ export function rateLimitMiddleware(bucket, maxPerMinute) {
   const limiter = rateLimit({
     windowMs: config.windowMs,
     max: config.max,
-    standardHeaders: true,  // RateLimit-* headers (RFC 6585)
+    standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
       res.status(429).json({ error: "Too many requests. Please wait." });

@@ -5,7 +5,7 @@ import { BrandMark } from "@/components/landing/BrandMark";
 
 export default function NotFound() {
   return (
-    <PageLayout variant="centered">
+    <PageLayout centered>
       <div className="mb-8 animate-fade-in-up">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-foreground/10 bg-sentio-elevated/80 shadow-sentio-glow-accent backdrop-blur-xl">
           <HardDrive className="h-10 w-10 text-primary" />

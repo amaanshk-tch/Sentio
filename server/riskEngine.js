@@ -19,15 +19,12 @@ function asRatio(value, fallback = 0) {
 }
 
 async function isSafeExternalDomain(domain) {
-  // Basic structural checks
   if (!domain.includes(".")) return false;
   if (domain.includes("..")) return false;
   if (/^[\d.]+$/.test(domain) || /^[0-9a-f:]+$/i.test(domain)) {
-    // It's a raw IP — apply IP checks directly
     return isSafeIP(domain);
   }
 
-  // Resolve and check all A/AAAA records
   try {
     const [ipv4, ipv6] = await Promise.all([
       dns.resolve4(domain).catch(() => []),
@@ -47,15 +44,15 @@ function isSafeIP(ip) {
     /^10\./,
     /^192\.168\./,
     /^172\.(1[6-9]|2\d|3[01])\./,
-    /^169\.254\./,         // link-local / cloud metadata
-    /^0\./,                // 0.0.0.0/8
-    /^::1$/,               // IPv6 loopback
-    /^::ffff:127\./,       // IPv4-mapped loopback
-    /^::ffff:10\./,        // IPv4-mapped private
-    /^::ffff:192\.168\./,  // IPv4-mapped private
-    /^fe80:/i,             // IPv6 link-local
-    /^fc00:/i,             // IPv6 unique local
-    /^fd/i,                // IPv6 unique local
+    /^169\.254\./,
+    /^0\./,
+    /^::1$/, 
+    /^::ffff:127\./,
+    /^::ffff:10\./,
+    /^::ffff:192\.168\./,
+    /^fe80:/i,
+    /^fc00:/i,
+    /^fd/i,
   ];
   return !PRIVATE.some(r => r.test(ip));
 }
@@ -88,7 +85,6 @@ export async function verifyHomeDomain(homeDomain, accountId) {
 
     const hasPassphrase  = Boolean(toml.NETWORK_PASSPHRASE);
     const hasSigningKey  = Boolean(toml.SIGNING_KEY);
-    // TOML [[ACCOUNTS]] parses as array of objects; flat ACCOUNTS = array of strings
     const accounts = Array.isArray(toml.ACCOUNTS)
       ? toml.ACCOUNTS.flatMap(a => typeof a === "string" ? [a] : (a.PUBLIC_KEY ? [a.PUBLIC_KEY] : []))
       : [];
@@ -159,7 +155,7 @@ export function analyzeTrustlines(balances) {
   return { qualityScore, flags, nonNativeCount: nonNative.length };
 }
 
-export function normalizeWalletRiskInput(input = {}) {
+function normalizeWalletRiskInput(input = {}) {
   const txTotal = asNonNegative(input?.tx?.total);
   const networkRisky = asNonNegative(input?.network?.riskyConnections);
   const networkTotal = Math.max(asNonNegative(input?.network?.totalConnections), networkRisky, 1);
@@ -203,7 +199,7 @@ export function normalizeWalletRiskInput(input = {}) {
   };
 }
 
-export function getRiskLevel(score) {
+function getRiskLevel(score) {
   if (score < 30) return "LOW";
   if (score < 70) return "MEDIUM";
   return "HIGH";
@@ -257,7 +253,6 @@ export function calculateWalletRisk(rawInput) {
     );
   }
 
-  // Interaction effects make manipulation harder and reward multi-signal consistency.
   add("recent_suspicious", "Recent suspicious activity", data.time.recentSuspiciousTx * 10);
   add("old_suspicious", "Historical suspicious activity", data.time.oldSuspiciousTx * 3);
 
@@ -266,15 +261,12 @@ export function calculateWalletRisk(rawInput) {
     add("interaction_token_stack", "Concentrated low-trust token stack", 8);
   }
 
-  // DEX exposure signals
   if (data.dex?.openOffers > 10) add("dex_heavy", "Heavy DEX activity (many open offers)", 8, { value: `${data.dex.openOffers} offers` });
   else if (data.dex?.openOffers > 5) add("dex_active", "Active DEX trading", 4, { value: `${data.dex.openOffers} offers` });
 
-  // Claimable balance / airdrop farming
   if (data.claimable?.count >= 8) add("airdrop_farming", "Potential airdrop farming behavior", 10, { value: `${data.claimable.count} claimable` });
   else if (data.claimable?.count >= 4) add("claimable_activity", "Notable claimable balance activity", 5, { value: `${data.claimable.count} claimable` });
 
-  // Soroban contract invocations
   if (data.soroban?.invocations > 10) add("soroban_heavy", "Heavy Soroban contract invocations", 12, { value: `${data.soroban.invocations} invocations` });
   else if (data.soroban?.invocations > 3) add("soroban_active", "Active Soroban contract usage", 5, { value: `${data.soroban.invocations} invocations` });
 
@@ -297,7 +289,7 @@ export function calculateWalletRisk(rawInput) {
   };
 }
 
-export function explainWalletRisk(rawInput, evaluation) {
+function explainWalletRisk(rawInput, evaluation) {
   const data = normalizeWalletRiskInput(rawInput);
   const assessed = evaluation ?? calculateWalletRisk(data);
   const reasons = [];

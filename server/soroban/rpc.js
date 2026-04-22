@@ -4,7 +4,7 @@ import { SOROBAN_RPC_URL as DEFAULT_RPC_URL } from "../config.js";
 let _reqId = 0;
 function nextId() { return ++_reqId; }
 
-const RPC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB hard cap
+const RPC_MAX_BYTES = 5 * 1024 * 1024;
 
 export async function rpcCall(method, params = {}, { signal, rpcUrl } = {}) {
   const url = rpcUrl || DEFAULT_RPC_URL;
@@ -21,7 +21,6 @@ export async function rpcCall(method, params = {}, { signal, rpcUrl } = {}) {
     throw err;
   }
 
-  // Enforce response size cap
   const contentLength = parseInt(res.headers.get("content-length") || "0", 10);
   if (contentLength > RPC_MAX_BYTES) {
     throw new Error(`RPC response too large: ${contentLength} bytes`);

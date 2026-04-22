@@ -33,7 +33,7 @@ export default function Admin() {
     timeoutRef.current = setTimeout(() => {
       performLogout();
       toast("Session expired due to inactivity.");
-    }, 15 * 60 * 1000); // 15 mins idle timeout
+    }, 15 * 60 * 1000);
   }, [unlocked, performLogout]);
 
   useEffect(() => {

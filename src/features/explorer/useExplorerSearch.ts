@@ -141,10 +141,8 @@ export function useExplorerSearch(
       setScanStep(null);
       setState({ status: "done", mode, network: activeNetwork, account, asset, txns, ops, onchainHistory, onchainFlags, scanResult, ledger });
 
-      // Log search history if wallet is connected
       if (isConnected && publicKey) {
         logSearch(publicKey, trimmed, activeNetwork);
-        // Update local history for real-time feel
         setSearchHistory(prev => [{
           scannedAddress: trimmed,
           network: activeNetwork,
@@ -170,7 +168,7 @@ export function useExplorerSearch(
     const q = lastQueryRef.current;
     if (q && state.status === "done" && searchedNetworkRef.current !== network) {
       searchedNetworkRef.current = network;
-      setState({ status: "loading" }); // clear old result immediately
+      setState({ status: "loading" });
       handleSearchRef.current(q, { network });
     }
   }, [network, state.status]);

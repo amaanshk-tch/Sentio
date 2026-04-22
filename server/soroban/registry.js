@@ -265,7 +265,6 @@ export async function submitSignedTransaction(signedXdr) {
       return { success: false, reason: "No contract configured on server." };
     }
 
-    // Decode expected contract ID to raw bytes for comparison
     let expectedBytes;
     try {
       expectedBytes = StrKey.decodeContract(CONTRACT_ID);
@@ -273,22 +272,16 @@ export async function submitSignedTransaction(signedXdr) {
       return { success: false, reason: "Server contract ID is misconfigured." };
     }
 
-    // Validate every operation targets only the risk registry contract.
-    // stellar-sdk parsed ops don't expose contractId directly — inspect the raw XDR.
     const ops = tx.operations;
     const isValid = ops.every(op => {
       if (op.type !== "invokeHostFunction") return false;
       try {
         const hostFn = op.func;
-        // Must be invokeContract type
         if (hostFn.switch().name !== "hostFunctionTypeInvokeContract") return false;
         const invokeArgs = hostFn.invokeContract();
-        // contractAddress() returns an ScAddress xdr object
         const scAddr = invokeArgs.contractAddress();
-        // switch name is "scAddressTypeContract" for contracts
         if (scAddr.switch().name !== "scAddressTypeContract") return false;
         const contractIdBytes = scAddr.contractId();
-        // Compare byte-by-byte with expected
         return Buffer.from(contractIdBytes).equals(Buffer.from(expectedBytes));
       } catch {
         return false;

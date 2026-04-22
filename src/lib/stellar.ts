@@ -118,7 +118,7 @@ function parseAssetInput(input: string): { code: string; issuer?: string } | nul
   return null;
 }
 
-export async function fetchAccount(address: string, network: NetworkType = "testnet"): Promise<HorizonAccount> {
+async function fetchAccount(address: string, network: NetworkType = "testnet"): Promise<HorizonAccount> {
   const label = network === "mainnet" ? "Mainnet" : "Testnet";
   const res = await fetch(`${getHorizonUrl(network)}/accounts/${address.trim()}`);
   if (!res.ok) {
@@ -146,7 +146,7 @@ export async function fetchAccountOperations(address: string, limit = 10, networ
   return data._embedded?.records ?? [];
 }
 
-export async function fetchAsset(code: string, issuer?: string, network: NetworkType = "testnet"): Promise<HorizonAsset | null> {
+async function fetchAsset(code: string, issuer?: string, network: NetworkType = "testnet"): Promise<HorizonAsset | null> {
   const label = network === "mainnet" ? "Mainnet" : "Testnet";
   let url = `${getHorizonUrl(network)}/assets?asset_code=${code}&limit=1`;
   if (issuer) url += `&asset_issuer=${issuer}`;
@@ -171,7 +171,7 @@ export async function fetchLatestLedger(network: NetworkType = "testnet"): Promi
 
 export type SearchMode = "account" | "asset";
 
-export function detectInputType(input: string): SearchMode {
+function detectInputType(input: string): SearchMode {
   return isAccountId(input.trim()) ? "account" : "asset";
 }
 

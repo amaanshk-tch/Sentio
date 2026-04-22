@@ -28,7 +28,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem("sentio-network");
       return stored === "mainnet" ? "mainnet" : "testnet";
     } catch {
-      /* ignore */
       return "testnet";
     }
   });
