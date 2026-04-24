@@ -12,9 +12,11 @@ const pool = mysql.createPool({
   queueLimit:         0,
 });
 
+const DB_DOWN_CODES = ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ER_ACCESS_DENIED_ERROR'];
+
 pool.getConnection()
   .then(conn => { console.log("[users] MySQL connected"); conn.release(); })
-  .catch(err => { console.error("[users] MySQL connection failed:", err.message); process.exit(1); });
+  .catch(err => { console.error("[users] MySQL connection failed — user history disabled:", err.message); });
 
 const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
 const VALID_SCANNED_RE = /^[A-Z0-9]{1,12}:[A-Z2-7]{56}$|^G[A-Z2-7]{55}$|^C[A-Z2-7]{55}$/;
@@ -26,8 +28,9 @@ export async function connectUserHandler(req, res) {
     return res.status(400).json({ error: "Invalid wallet address." });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     const now = new Date();
     const net = network === "mainnet" ? "mainnet" : "testnet";
 
@@ -44,10 +47,11 @@ export async function connectUserHandler(req, res) {
 
     return res.json({ success: true, total });
   } catch (err) {
+    if (DB_DOWN_CODES.includes(err.code)) return res.json({ success: true, total: 0 });
     console.error("[connectUserHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 }
 
@@ -62,8 +66,9 @@ export async function logSearchHandler(req, res) {
     return res.status(400).json({ error: "Invalid scanned address." });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     const now = new Date();
     const net = network === "mainnet" ? "mainnet" : "testnet";
 
@@ -78,10 +83,11 @@ export async function logSearchHandler(req, res) {
 
     return res.json({ success: true });
   } catch (err) {
+    if (DB_DOWN_CODES.includes(err.code)) return res.json({ success: true });
     console.error("[logSearchHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 }
 
@@ -92,8 +98,9 @@ export async function getSearchHistoryHandler(req, res) {
     return res.status(400).json({ error: "Invalid wallet address." });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     const [rows] = await conn.execute(
       `SELECT scannedAddress, network, searchedAt FROM search_history
        WHERE walletAddress = ? ORDER BY searchedAt DESC LIMIT 50`,
@@ -101,22 +108,25 @@ export async function getSearchHistoryHandler(req, res) {
     );
     return res.json({ history: rows });
   } catch (err) {
+    if (DB_DOWN_CODES.includes(err.code)) return res.json({ history: [] });
     console.error("[getSearchHistoryHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 }
 
 export async function getUserCountHandler(req, res) {
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     const [[{ total }]] = await conn.execute("SELECT COUNT(*) as total FROM users");
     return res.json({ total });
   } catch (err) {
+    if (DB_DOWN_CODES.includes(err.code)) return res.json({ total: 0 });
     console.error("[getUserCountHandler error]", err);
     return res.status(500).json({ error: "Internal server error." });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 }
