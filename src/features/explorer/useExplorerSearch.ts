@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE = "";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { searchStellar, fetchAccountTransactions, fetchAccountOperations, fetchLatestLedger } from "@/lib/stellar";
