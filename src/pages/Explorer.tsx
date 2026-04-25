@@ -114,12 +114,12 @@ export default function Explorer() {
             Stellar Explorer
           </span>
           <span className={[
-            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-caption-upper font-bold",
+            "inline-flex items-center gap-1.5 rounded-md border border-foreground/10 bg-sentio-surface/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide",
             network === "mainnet"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-              : "border-amber-500/30 bg-amber-500/10 text-amber-400",
+              ? "text-emerald-500"
+              : "text-amber-500",
           ].join(" ")}>
-            <span className={`h-1.5 w-1.5 rounded-full ${network === "mainnet" ? "bg-emerald-400" : "bg-amber-400"}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${network === "mainnet" ? "bg-emerald-500" : "bg-amber-500"}`} />
             {network === "mainnet" ? "Mainnet" : "Testnet"}
           </span>
         </div>
