@@ -227,3 +227,4 @@ The cache intentionally lives in process memory — there is no Redis dependency
 ---
 
 Risk scores are probabilistic signals, not guarantees. Always verify independently before sending funds to an unknown address.
+
