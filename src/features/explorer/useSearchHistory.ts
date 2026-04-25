@@ -1,5 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 import { useState, useEffect, useCallback } from "react";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 export interface SearchHistoryItem {
   scannedAddress: string;
